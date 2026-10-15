@@ -20,3 +20,6 @@ factory-boy>=3.3.0
 # Security
 argon2-cffi>=23.1.0
 django-ratelimit>=4.1.0
+
+# Static files (serves /static/ in production without nginx access to the container)
+whitenoise>=6.6.0
