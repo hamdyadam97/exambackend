@@ -1,0 +1,27 @@
+{% load i18n %}
+{% if page_obj.has_other_pages %}
+<div class="px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3">
+  <p class="text-sm text-slate-500 dark:text-slate-400">
+    {% blocktrans with number=page_obj.number total=paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktrans %}
+  </p>
+  <nav class="flex items-center gap-1">
+    {% if page_obj.has_previous %}
+      <a href="?page=1{{ query_string }}" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">{% trans "First" %}</a>
+      <a href="?page={{ page_obj.previous_page_number }}{{ query_string }}" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">{% trans "Previous" %}</a>
+    {% endif %}
+    {% for p in page_range %}
+      {% if p == page_obj.number %}
+        <span class="px-3 py-2 rounded-lg bg-brand-600 text-white text-sm">{{ p }}</span>
+      {% elif p == '...' %}
+        <span class="px-2 text-slate-400">...</span>
+      {% else %}
+        <a href="?page={{ p }}{{ query_string }}" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">{{ p }}</a>
+      {% endif %}
+    {% endfor %}
+    {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{{ query_string }}" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">{% trans "Next" %}</a>
+      <a href="?page={{ paginator.num_pages }}{{ query_string }}" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">{% trans "Last" %}</a>
+    {% endif %}
+  </nav>
+</div>
+{% endif %}

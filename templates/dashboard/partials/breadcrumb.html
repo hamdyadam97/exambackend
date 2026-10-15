@@ -1,0 +1,23 @@
+{% load i18n %}
+{% if breadcrumb %}
+<nav class="mb-6" aria-label="Breadcrumb">
+  <ol class="flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+    <li>
+      <a href="{% url 'dashboard:index' %}" class="hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1">
+        <i class="fa-solid fa-house text-xs"></i>
+        <span>{% trans "Home" %}</span>
+      </a>
+    </li>
+    {% for item in breadcrumb %}
+      <li><i class="fa-solid fa-chevron-{% if LANGUAGE_CODE == 'ar' %}left{% else %}right{% endif %} text-xs"></i></li>
+      <li>
+        {% if item.url %}
+          <a href="{{ item.url }}" class="hover:text-brand-600 dark:hover:text-brand-400">{{ item.label }}</a>
+        {% else %}
+          <span class="font-medium text-slate-800 dark:text-slate-200">{{ item.label }}</span>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+</nav>
+{% endif %}

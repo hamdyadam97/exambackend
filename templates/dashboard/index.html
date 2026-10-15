@@ -1,0 +1,254 @@
+{% extends "dashboard/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Overview" %}{% endblock %}
+{% block page_title %}{% trans "Dashboard Overview" %}{% endblock %}
+
+{% block content %}
+<!-- KPI Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6 mb-8">
+  {% include "dashboard/partials/stat_card.html" with label=_('Total Students') value=stats.users icon='fa-users' icon_bg='bg-brand-50 dark:bg-brand-900/30' icon_color='text-brand-600 dark:text-brand-400' subtext=stats.users_growth_subtext %}
+  {% include "dashboard/partials/stat_card.html" with label=_('Total Questions') value=stats.questions icon='fa-circle-question' icon_bg='bg-emerald-50 dark:bg-emerald-900/30' icon_color='text-emerald-600 dark:text-emerald-400' %}
+  {% include "dashboard/partials/stat_card.html" with label=_('Total Exams') value=stats.exams icon='fa-file-lines' icon_bg='bg-amber-50 dark:bg-amber-900/30' icon_color='text-amber-600 dark:text-amber-400' %}
+  {% include "dashboard/partials/stat_card.html" with label=_('Active Subscriptions') value=stats.active_subscriptions icon='fa-credit-card' icon_bg='bg-cyan-50 dark:bg-cyan-900/30' icon_color='text-cyan-600 dark:text-cyan-400' %}
+  {% include "dashboard/partials/stat_card.html" with label=_('Revenue') value='$'|add:stats.revenue|floatformat:2 icon='fa-sack-dollar' icon_bg='bg-rose-50 dark:bg-rose-900/30' icon_color='text-rose-600 dark:text-rose-400' subtext=stats.transactions_subtext %}
+  {% include "dashboard/partials/stat_card.html" with label=_('Certificates') value=stats.certificates icon='fa-certificate' icon_bg='bg-violet-50 dark:bg-violet-900/30' icon_color='text-violet-600 dark:text-violet-400' %}
+  {% include "dashboard/partials/stat_card.html" with label=_('Pass Rate') value=stats.pass_rate|add:'%' icon='fa-chart-line' icon_bg='bg-green-50 dark:bg-green-900/30' icon_color='text-green-600 dark:text-green-400' %}
+  {% include "dashboard/partials/stat_card.html" with label=_('Open Support') value=stats.open_support icon='fa-headset' icon_bg='bg-pink-50 dark:bg-pink-900/30' icon_color='text-pink-600 dark:text-pink-400' %}
+</div>
+
+<!-- Charts & Quick Stats -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+  <div class="admin-card rounded-2xl p-6 shadow-sm xl:col-span-2">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">{% trans "Activity (Last 30 Days)" %}</h2>
+      <div class="flex flex-wrap gap-3">
+        <span class="inline-flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400"><span class="legend-dot legend-dot-users"></span>{% trans "Users" %}</span>
+        <span class="inline-flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400"><span class="legend-dot legend-dot-transactions"></span>{% trans "Transactions" %}</span>
+        <span class="inline-flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400"><span class="legend-dot legend-dot-trails"></span>{% trans "Exam Trails" %}</span>
+      </div>
+    </div>
+    <div class="relative h-80">
+      <canvas id="activityChart" style="width:100%;height:100%;"></canvas>
+    </div>
+  </div>
+
+  <div class="admin-card rounded-2xl p-6 shadow-sm">
+    <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-4">{% trans "System Status" %}</h2>
+    <div class="space-y-4">
+      <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+        <span class="text-sm text-slate-600 dark:text-slate-300">{% trans "Invoices" %}</span>
+        <span class="font-bold text-slate-800 dark:text-slate-100">{{ stats.invoices }}</span>
+      </div>
+      <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+        <span class="text-sm text-slate-600 dark:text-slate-300">{% trans "Subscriptions" %}</span>
+        <span class="font-bold text-slate-800 dark:text-slate-100">{{ stats.subscriptions }}</span>
+      </div>
+      <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+        <span class="text-sm text-slate-600 dark:text-slate-300">{% trans "Exam Trails" %}</span>
+        <span class="font-bold text-slate-800 dark:text-slate-100">{{ stats.exam_trails }}</span>
+      </div>
+      <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+        <span class="text-sm text-slate-600 dark:text-slate-300">{% trans "Pending Testimonials" %}</span>
+        <span class="font-bold text-amber-600">{{ stats.pending_testimonials }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Data -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+  <!-- Latest Students -->
+  <div class="admin-card rounded-2xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+      <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">{% trans "Latest Students" %}</h2>
+      <a href="{% url 'dashboard:list' 'users' %}" class="text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">{% trans "View all" %}</a>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+          <tr>
+            <th class="px-6 py-3 font-medium text-start">{% trans "Name" %}</th>
+            <th class="px-6 py-3 font-medium text-start">{% trans "Phone" %}</th>
+            <th class="px-6 py-3 font-medium text-start">{% trans "Joined" %}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+          {% for u in recent_users %}
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+            <td class="px-6 py-3 text-slate-800 dark:text-slate-200 font-medium">{{ u.full_name|default:"—" }}</td>
+            <td class="px-6 py-3 text-slate-500 dark:text-slate-400">{{ u.phone|default:"—" }}</td>
+            <td class="px-6 py-3 text-slate-500 dark:text-slate-400">{{ u.date_joined|date:"Y-m-d" }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="3" class="px-6 py-8 text-center text-slate-400">{% trans "No students yet" %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Latest Transactions -->
+  <div class="admin-card rounded-2xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+      <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">{% trans "Latest Transactions" %}</h2>
+      <a href="{% url 'dashboard:list' 'transactions' %}" class="text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">{% trans "View all" %}</a>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+          <tr>
+            <th class="px-6 py-3 font-medium text-start">{% trans "User" %}</th>
+            <th class="px-6 py-3 font-medium text-start">{% trans "Amount" %}</th>
+            <th class="px-6 py-3 font-medium text-start">{% trans "Status" %}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+          {% for t in recent_transactions %}
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+            <td class="px-6 py-3 text-slate-800 dark:text-slate-200 font-medium">{{ t.user.full_name|default:t.user.phone }}</td>
+            <td class="px-6 py-3 text-slate-500 dark:text-slate-400">{{ t.amount|floatformat:2 }} {{ t.currency }}</td>
+            <td class="px-6 py-3">
+              {% if t.is_success %}
+                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>{% trans "Success" %}</span>
+              {% else %}
+                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"><span class="w-2 h-2 rounded-full bg-rose-500"></span>{% trans "Failed" %}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="3" class="px-6 py-8 text-center text-slate-400">{% trans "No transactions yet" %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+  (function() {
+    function cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function updateChartColors(chart) {
+      const colors = ['--chart-users', '--chart-transactions', '--chart-trails'];
+      const fills = ['--chart-users-fill', '--chart-transactions-fill', '--chart-trails-fill'];
+      chart.data.datasets.forEach(function(ds, i) {
+        ds.borderColor = cssVar(colors[i]);
+        ds.backgroundColor = cssVar(fills[i]);
+      });
+      chart.options.scales.y.grid.color = cssVar('--chart-grid');
+      chart.options.scales.x.grid.color = 'transparent';
+      chart.options.scales.y.ticks.color = cssVar('--chart-ticks');
+      chart.options.scales.x.ticks.color = cssVar('--chart-ticks');
+      chart.update('none');
+    }
+
+    function initActivityChart() {
+      const ctx = document.getElementById('activityChart');
+      if (!ctx || window.activityChart) return;
+
+      window.activityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: {{ chart_labels|safe }},
+          datasets: [
+            {
+              label: '{% trans "Users" %}',
+              data: {{ users_chart|safe }},
+              borderWidth: 2.5,
+              tension: 0.4,
+              pointRadius: 0,
+              pointHoverRadius: 5,
+              fill: true
+            },
+            {
+              label: '{% trans "Transactions" %}',
+              data: {{ transactions_chart|safe }},
+              borderWidth: 2.5,
+              tension: 0.4,
+              pointRadius: 0,
+              pointHoverRadius: 5,
+              fill: true
+            },
+            {
+              label: '{% trans "Exam Trails" %}',
+              data: {{ trails_chart|safe }},
+              borderWidth: 2.5,
+              tension: 0.4,
+              pointRadius: 0,
+              pointHoverRadius: 5,
+              fill: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.92)',
+              titleColor: '#f8fafc',
+              bodyColor: '#e2e8f0',
+              borderColor: 'rgba(148, 163, 184, 0.2)',
+              borderWidth: 1,
+              padding: 10,
+              cornerRadius: 8,
+              displayColors: true
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              border: { display: false },
+              grid: { color: cssVar('--chart-grid'), drawBorder: false },
+              ticks: { color: cssVar('--chart-ticks'), padding: 8 }
+            },
+            x: {
+              border: { display: false },
+              grid: { display: false, drawBorder: false },
+              ticks: {
+                color: cssVar('--chart-ticks'),
+                maxTicksLimit: 7,
+                maxRotation: 0,
+                autoSkip: true,
+                padding: 8,
+                callback: function(value, index, values) {
+                  const label = this.getLabelForValue(value);
+                  const date = new Date(label);
+                  if (isNaN(date)) return label;
+                  return date.toLocaleDateString('ar-JO', { day: 'numeric', month: 'short' });
+                }
+              }
+            }
+          }
+        }
+      });
+      updateChartColors(window.activityChart);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initActivityChart);
+    } else {
+      initActivityChart();
+    }
+
+    window.addEventListener('adminthemechange', function() {
+      if (window.activityChart) updateChartColors(window.activityChart);
+    });
+  })();
+</script>
+{% endblock extra_js %}

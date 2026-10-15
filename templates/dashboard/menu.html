@@ -1,0 +1,8 @@
+{% for app, items in groups.items %}
+  <div class="px-6 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">{{ app }}</div>
+  {% for item in items %}
+    <a href="{% url 'dashboard:list' item.section %}" class="sidebar-link {% if current_section == item.section %}active{% endif %} flex items-center px-6 py-3 text-sm">
+      <span>{{ item.verbose_name }}</span>
+    </a>
+  {% endfor %}
+{% endfor %}

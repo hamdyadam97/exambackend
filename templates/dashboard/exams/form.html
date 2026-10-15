@@ -1,0 +1,205 @@
+{% extends "dashboard/base.html" %}
+{% load i18n dashboard_tags %}
+
+{% block title %}{% if object.pk %}{% trans "Edit" %}{% else %}{% trans "Add" %}{% endif %} {% trans "Exam" %}{% endblock %}
+{% block page_title %}{% if object.pk %}{% trans "Edit Exam" %}{% else %}{% trans "Add Exam" %}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto" x-data="{ tab: 'basic' }">
+  <div class="admin-card rounded-2xl p-6 shadow-sm mb-6 flex items-center gap-4">
+    <div class="w-14 h-14 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+      <i class="fa-solid fa-file-lines text-2xl"></i>
+    </div>
+    <div>
+      <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100">
+        {% if object.pk %}{% trans "Edit Exam" %} #{{ object.pk }}{% else %}{% trans "Add New Exam" %}{% endif %}
+      </h2>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">{% trans "Build an exam and manage its questions." %}</p>
+    </div>
+  </div>
+
+  <form method="post" class="admin-card rounded-2xl shadow-sm p-6 lg:p-8">
+    {% csrf_token %}
+
+    {% if form.non_field_errors or question_formset.non_field_errors %}
+      <div class="mb-6 rounded-xl bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-900/30 text-rose-700 dark:text-rose-300 px-5 py-4 text-sm flex items-start gap-3">
+        <i class="fa-solid fa-circle-exclamation mt-1"></i>
+        <div>{{ form.non_field_errors }} {{ question_formset.non_field_errors }}</div>
+      </div>
+    {% endif %}
+
+    <div class="border-b border-slate-200 dark:border-slate-700 mb-6">
+      <nav class="flex gap-1 overflow-x-auto">
+        <button type="button" @click="tab = 'basic'" :class="tab === 'basic' ? 'border-brand-500 text-brand-600' : 'border-transparent text-slate-500'" class="px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap">
+          <i class="fa-solid fa-circle-info me-1"></i>{% trans "Basic Info" %}
+        </button>
+        <button type="button" @click="tab = 'categorization'" :class="tab === 'categorization' ? 'border-brand-500 text-brand-600' : 'border-transparent text-slate-500'" class="px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap">
+          <i class="fa-solid fa-folder-tree me-1"></i>{% trans "Categorization" %}
+        </button>
+        <button type="button" @click="tab = 'settings'" :class="tab === 'settings' ? 'border-brand-500 text-brand-600' : 'border-transparent text-slate-500'" class="px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap">
+          <i class="fa-solid fa-sliders me-1"></i>{% trans "Settings" %}
+        </button>
+        <button type="button" @click="tab = 'questions'" :class="tab === 'questions' ? 'border-brand-500 text-brand-600' : 'border-transparent text-slate-500'" class="px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap">
+          <i class="fa-solid fa-list-check me-1"></i>{% trans "Questions" %}
+        </button>
+      </nav>
+    </div>
+
+    <!-- Basic Info -->
+    <div x-show="tab === 'basic'" x-transition class="space-y-5">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Title" %}</label>
+          {{ form.title }}
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Description" %}</label>
+          {{ form.description }}
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Duration (minutes)" %}</label>
+          {{ form.duration_minutes }}
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Attempts Allowed" %}</label>
+          {{ form.attempts_allowed }}
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Score" %}</label>
+          {{ form.score }}
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Language" %}</label>
+          {{ form.language }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Categorization -->
+    <div x-show="tab === 'categorization'" x-transition class="space-y-5">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Specialty / Category" %}</label>
+          {{ form.category }}
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Sub Category" %}</label>
+          {{ form.sub_category }}
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Sub-Sub Category" %}</label>
+          {{ form.sub_sub_category }}
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Instructor" %}</label>
+          {{ form.instructor }}
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Exam Type" %}</label>
+          {{ form.exam_type }}
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Difficulty" %}</label>
+          {{ form.difficulty_level }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div x-show="tab === 'settings'" x-transition class="space-y-5">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Status" %}</label>
+          {{ form.status }}
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Icon URL" %}</label>
+          {{ form.icon }}
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Instructions" %}</label>
+          {{ form.instructions }}
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Requirements" %}</label>
+          {{ form.requirements }}
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Rules & Policies" %}</label>
+          {{ form.rules_policies }}
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <label class="flex items-center gap-3 admin-card rounded-xl p-4 cursor-pointer">
+          {{ form.certificate_available }}
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{% trans "Certificate Available" %}</span>
+        </label>
+        <label class="flex items-center gap-3 admin-card rounded-xl p-4 cursor-pointer">
+          {{ form.has_instant_result }}
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{% trans "Instant Result" %}</span>
+        </label>
+        <label class="flex items-center gap-3 admin-card rounded-xl p-4 cursor-pointer">
+          {{ form.has_auto_save }}
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{% trans "Auto Save" %}</span>
+        </label>
+        <label class="flex items-center gap-3 admin-card rounded-xl p-4 cursor-pointer">
+          {{ form.has_timer }}
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{% trans "Timer" %}</span>
+        </label>
+        <label class="flex items-center gap-3 admin-card rounded-xl p-4 cursor-pointer">
+          {{ form.has_random_questions }}
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{% trans "Random Questions" %}</span>
+        </label>
+        <label class="flex items-center gap-3 admin-card rounded-xl p-4 cursor-pointer">
+          {{ form.has_progress_tracking }}
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{% trans "Progress Tracking" %}</span>
+        </label>
+        <label class="flex items-center gap-3 admin-card rounded-xl p-4 cursor-pointer">
+          {{ form.is_featured }}
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{% trans "Featured" %}</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Questions -->
+    <div x-show="tab === 'questions'" x-transition class="space-y-5">
+      {{ question_formset.management_form }}
+      <div class="space-y-4">
+        {% for qform in question_formset.forms %}
+          <div class="admin-card rounded-xl p-5">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+              <div class="md:col-span-8">
+                <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Question" %}</label>
+                {{ qform.question }}
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Order" %}</label>
+                {{ qform.order }}
+              </div>
+              <div class="md:col-span-2">
+                {% if qform.instance.pk %}
+                  <label class="flex items-center gap-2 text-sm text-rose-600 cursor-pointer">
+                    {{ qform.DELETE }}
+                    <i class="fa-solid fa-trash"></i>
+                    <span>{% trans "Remove" %}</span>
+                  </label>
+                {% endif %}
+              </div>
+            </div>
+            {% for hidden in qform.hidden_fields %}{{ hidden }}{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3 pt-6 mt-8 border-t border-slate-100 dark:border-slate-700">
+      <a href="{% url 'dashboard:list' 'exams' %}" class="px-5 py-3 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium transition">
+        {% trans "Cancel" %}
+      </a>
+      <button type="submit" class="px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium shadow-sm transition inline-flex items-center gap-2">
+        <i class="fa-solid fa-floppy-disk"></i> {% trans "Save Exam" %}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock content %}

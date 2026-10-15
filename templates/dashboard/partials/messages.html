@@ -1,0 +1,21 @@
+{% if messages %}
+<div class="space-y-3 mb-6">
+  {% for message in messages %}
+    <div class="admin-message admin-card rounded-lg px-4 py-3 flex items-start gap-3 border-s-4
+                {% if message.tags == 'success' %}border-s-green-500 bg-green-50 dark:bg-green-900/10{% endif %}
+                {% if message.tags == 'error' %}border-s-red-500 bg-red-50 dark:bg-red-900/10{% endif %}
+                {% if message.tags == 'warning' %}border-s-amber-500 bg-amber-50 dark:bg-amber-900/10{% endif %}
+                {% if message.tags == 'info' %}border-s-brand-500 bg-brand-50 dark:bg-brand-900/10{% endif %}">
+      <i class="fa-solid mt-1
+         {% if message.tags == 'success' %}fa-circle-check text-green-600{% endif %}
+         {% if message.tags == 'error' %}fa-circle-xmark text-red-600{% endif %}
+         {% if message.tags == 'warning' %}fa-triangle-exclamation text-amber-600{% endif %}
+         {% if message.tags == 'info' %}fa-circle-info text-brand-600{% endif %}"></i>
+      <div class="flex-1 text-sm">{{ message }}</div>
+      <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}

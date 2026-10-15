@@ -1,0 +1,15 @@
+{% load i18n %}
+<div class="admin-card rounded-2xl p-5 lg:p-6 shadow-sm hover:shadow-md transition-all duration-200">
+  <div class="flex items-start justify-between gap-4">
+    <div class="min-w-0">
+      <p class="text-sm font-medium text-slate-500 dark:text-slate-400">{% trans label %}</p>
+      <p class="text-2xl lg:text-3xl font-bold text-slate-800 dark:text-slate-100 mt-1 truncate">{{ value }}</p>
+      {% if subtext %}
+        <p class="text-xs text-slate-400 dark:text-slate-500 mt-2">{{ subtext }}</p>
+      {% endif %}
+    </div>
+    <div class="w-12 h-12 rounded-xl {{ icon_bg }} {{ icon_color }} flex items-center justify-center shrink-0 shadow-sm">
+      <i class="fa-solid {{ icon }} text-lg"></i>
+    </div>
+  </div>
+</div>

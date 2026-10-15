@@ -1,0 +1,63 @@
+{% extends "dashboard/base.html" %}
+{% load i18n dashboard_tags %}
+
+{% block title %}{% if action == 'create' %}{% trans "Add" %}{% else %}{% trans "Edit" %}{% endif %} {{ config.verbose_name|ar }}{% endblock %}
+{% block page_title %}{% if action == 'create' %}{% trans "Add" %}{% else %}{% trans "Edit" %}{% endif %} {{ config.verbose_name|ar }}{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <!-- Page header -->
+  <div class="admin-card rounded-2xl p-6 shadow-sm mb-6 flex items-center gap-4">
+    <div class="w-14 h-14 rounded-xl bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 flex items-center justify-center shrink-0">
+      <i class="fa-solid fa-pen-to-square text-2xl"></i>
+    </div>
+    <div>
+      <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100">
+        {% if action == 'create' %}{% trans "Add New" %} {{ config.verbose_name|ar }}{% else %}{{ config.verbose_name|ar }} #{{ object.pk }}{% endif %}
+      </h2>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">{% trans "Review the information before saving." %}</p>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="admin-card rounded-2xl shadow-sm p-6 lg:p-8">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="mb-6 rounded-xl bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-900/30 text-rose-700 dark:text-rose-300 px-5 py-4 text-sm flex items-start gap-3">
+        <i class="fa-solid fa-circle-exclamation mt-1"></i>
+        <div>{{ form.non_field_errors }}</div>
+      </div>
+    {% endif %}
+
+    <!-- Basic Info Card -->
+    <div class="mb-6">
+      <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-circle-info text-brand-500"></i> {% trans "Basic Information" %}
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {% for field in form %}
+          {% if field.field.widget.input_type == 'textarea' or field.name in 'instructions,message,description,question_text,text_question,notes,content' %}
+            {% include "dashboard/partials/form_field.html" with wide=True %}
+          {% else %}
+            {% include "dashboard/partials/form_field.html" %}
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-100 dark:border-slate-700">
+      <a href="{% url 'dashboard:list' section %}" class="px-5 py-3 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium transition">
+        {% trans "Cancel" %}
+      </a>
+      <button type="submit" class="px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium shadow-sm transition inline-flex items-center gap-2">
+        <i class="fa-solid fa-floppy-disk"></i> {% trans "Save" %}
+      </button>
+    </div>
+  </form>
+</div>
+
+<style>
+  textarea { min-height: 120px; }
+  input[type="checkbox"] { width: 1.25rem; height: 1.25rem; accent-color: #4f46e5; }
+</style>
+{% endblock content %}

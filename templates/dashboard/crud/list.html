@@ -1,0 +1,223 @@
+{% extends "dashboard/base.html" %}
+{% load i18n dashboard_tags %}
+
+{% block title %}{{ config.verbose_name|ar }}{% endblock %}
+{% block page_title %}{{ config.verbose_name|ar }}{% endblock %}
+
+{% block content %}
+<!-- Toolbar -->
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+  <div>
+    <p class="text-sm text-slate-500 dark:text-slate-400">{% trans "Manage and organize" %} {{ config.verbose_name|ar }}</p>
+  </div>
+  <div class="flex items-center gap-2">
+    {% if can_export %}
+    <a href="?export=csv{{ query_string }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">
+      <i class="fa-solid fa-file-export"></i> {% trans "Export" %}
+    </a>
+    {% endif %}
+    {% if can_import %}
+    <a href="{% url 'dashboard:import' section %}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">
+      <i class="fa-solid fa-file-import"></i> {% trans "Import" %}
+    </a>
+    {% endif %}
+    {% if section == 'questions' %}
+      <a href="{% url 'dashboard:question_create' %}" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm">
+        <i class="fa-solid fa-plus"></i> {% trans "Add New" %}
+      </a>
+    {% elif section == 'exams' %}
+      <a href="{% url 'dashboard:exam_create' %}" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm">
+        <i class="fa-solid fa-plus"></i> {% trans "Add New" %}
+      </a>
+    {% else %}
+      <a href="{% url 'dashboard:create' section %}" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm">
+        <i class="fa-solid fa-plus"></i> {% trans "Add New" %}
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="admin-card rounded-2xl p-4 lg:p-6 shadow-sm mb-6">
+  <form method="get" class="flex flex-col lg:flex-row gap-4">
+    <div class="flex-1 relative">
+      <i class="fa-solid fa-magnifying-glass absolute top-1/2 -translate-y-1/2 ms-3 text-slate-400"></i>
+      <input type="text" name="q" value="{{ search_query }}" placeholder="{% trans 'Search...' %}"
+             class="admin-input w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg ps-10 pe-4 py-2 text-sm">
+    </div>
+    {% for f in filters %}
+      <select name="{{ f.name }}" class="admin-input bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm">
+        <option value="">{{ f.label|ar }}</option>
+        {% for opt in f.options %}
+          <option value="{{ opt.value }}" {% if f.current == opt.value %}selected{% endif %}>{{ opt.label|ar }}</option>
+        {% endfor %}
+      </select>
+    {% endfor %}
+    <button type="submit" class="inline-flex items-center justify-center gap-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+      <i class="fa-solid fa-filter"></i> {% trans "Filter" %}
+    </button>
+    {% if search_query or has_active_filters %}
+      <a href="{% url 'dashboard:list' section %}" class="inline-flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-slate-800 px-3 py-2 text-sm">
+        <i class="fa-solid fa-rotate-left me-1"></i> {% trans "Reset" %}
+      </a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Data Table -->
+<div class="admin-card rounded-2xl shadow-sm overflow-hidden">
+  <form method="post" action="{% url 'dashboard:bulk_action' section %}" id="bulkForm">
+    {% csrf_token %}
+    <div class="px-6 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 flex flex-wrap items-center gap-3">
+      <input type="checkbox" id="selectAll" class="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+      <label for="selectAll" class="text-sm text-slate-600 dark:text-slate-300">{% trans "Select all" %}</label>
+      <span class="text-slate-300">|</span>
+      <input type="hidden" name="bulk_action" id="bulkActionInput" value="">
+      <button type="button" onclick="submitBulk('archive')" class="bulk-btn text-sm text-slate-600 dark:text-slate-300 hover:text-brand-600 disabled:opacity-50" disabled>
+        <i class="fa-solid fa-box-archive me-1"></i>{% trans "Archive" %}
+      </button>
+      <button type="button" onclick="submitBulk('restore')" class="bulk-btn text-sm text-slate-600 dark:text-slate-300 hover:text-brand-600 disabled:opacity-50" disabled>
+        <i class="fa-solid fa-rotate-left me-1"></i>{% trans "Restore" %}
+      </button>
+      <button type="button" onclick="submitBulk('delete')" class="bulk-btn text-sm text-rose-600 hover:text-rose-700 disabled:opacity-50" disabled>
+        <i class="fa-solid fa-trash me-1"></i>{% trans "Delete" %}
+      </button>
+    </div>
+
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm admin-table">
+      <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400">
+        <tr>
+          <th class="px-4 py-3 w-10"><input type="checkbox" class="row-checkbox w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"></th>
+          {% for col in list_display %}
+            <th class="px-4 py-3 font-semibold text-start whitespace-nowrap">
+              <a href="?ordering={% if current_ordering == col %}-{% endif %}{{ col }}{{ query_string }}"
+                 class="inline-flex items-center gap-1 hover:text-brand-600 dark:hover:text-brand-400">
+                {{ model_meta|field_verbose:col }}
+                {% if current_ordering == col %}<i class="fa-solid fa-arrow-up text-xs"></i>{% elif current_ordering == '-'|add:col %}<i class="fa-solid fa-arrow-down text-xs"></i>{% else %}<i class="fa-solid fa-sort text-xs text-slate-300"></i>{% endif %}
+              </a>
+            </th>
+          {% endfor %}
+          <th class="px-4 py-3 font-semibold text-start">{% trans "Actions" %}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+        {% for obj in object_list %}
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+            <td class="px-4 py-3"><input type="checkbox" class="row-checkbox w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" value="{{ obj.pk }}"></td>
+            {% for col in list_display %}
+              <td class="px-4 py-3">
+                {% if forloop.first %}
+                  {% if section == 'questions' %}
+                    <a href="{% url 'dashboard:question_update' obj.pk %}" class="text-brand-600 hover:text-brand-700 dark:text-brand-400 font-medium">
+                      {{ obj|dashboard_attr:col }}
+                    </a>
+                  {% elif section == 'exams' %}
+                    <a href="{% url 'dashboard:exam_update' obj.pk %}" class="text-brand-600 hover:text-brand-700 dark:text-brand-400 font-medium">
+                      {{ obj|dashboard_attr:col }}
+                    </a>
+                  {% else %}
+                    <a href="{% url 'dashboard:update' section obj.pk %}" class="text-brand-600 hover:text-brand-700 dark:text-brand-400 font-medium">
+                      {{ obj|dashboard_attr:col }}
+                    </a>
+                  {% endif %}
+                {% elif col == 'status' %}
+                  <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium
+                    {% if obj.status == 1 %}bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400
+                    {% elif obj.status == 0 %}bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300
+                    {% else %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400{% endif %}">
+                    {{ obj|dashboard_attr:col }}
+                  </span>
+                {% else %}
+                  <span class="text-slate-600 dark:text-slate-300">{{ obj|dashboard_attr:col }}</span>
+                {% endif %}
+              </td>
+            {% endfor %}
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-1">
+                {% if section == 'questions' %}
+                  <a href="{% url 'dashboard:question_update' obj.pk %}" class="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 hover:bg-amber-100 flex items-center justify-center" title="{% trans 'Edit' %}">
+                    <i class="fa-solid fa-pen text-xs"></i>
+                  </a>
+                {% elif section == 'exams' %}
+                  <a href="{% url 'dashboard:exam_update' obj.pk %}" class="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 hover:bg-amber-100 flex items-center justify-center" title="{% trans 'Edit' %}">
+                    <i class="fa-solid fa-pen text-xs"></i>
+                  </a>
+                {% else %}
+                  <a href="{% url 'dashboard:update' section obj.pk %}" class="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 hover:bg-amber-100 flex items-center justify-center" title="{% trans 'Edit' %}">
+                    <i class="fa-solid fa-pen text-xs"></i>
+                  </a>
+                {% endif %}
+                <button type="button" hx-post="{% url 'dashboard:duplicate' section obj.pk %}" hx-confirm="{% trans 'Duplicate this record?' %}" class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 flex items-center justify-center" title="{% trans 'Duplicate' %}">
+                  <i class="fa-solid fa-copy text-xs"></i>
+                </button>
+                {% if obj.deleted_at or obj.status == 0 %}
+                  <button type="button" hx-post="{% url 'dashboard:restore' section obj.pk %}" class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 hover:bg-emerald-100 flex items-center justify-center" title="{% trans 'Restore' %}">
+                    <i class="fa-solid fa-rotate-left text-xs"></i>
+                  </button>
+                {% else %}
+                  <button type="button" hx-post="{% url 'dashboard:archive' section obj.pk %}" hx-confirm="{% trans 'Archive this record?' %}" class="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-900/20 text-orange-600 hover:bg-orange-100 flex items-center justify-center" title="{% trans 'Archive' %}">
+                    <i class="fa-solid fa-box-archive text-xs"></i>
+                  </button>
+                {% endif %}
+                <a href="{% url 'dashboard:delete' section obj.pk %}" class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-600 hover:bg-rose-100 flex items-center justify-center" title="{% trans 'Delete' %}">
+                  <i class="fa-solid fa-trash text-xs"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="{{ list_display|length|add:2 }}" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
+              <div class="flex flex-col items-center gap-2">
+                <i class="fa-regular fa-folder-open text-3xl"></i>
+                <p>{% trans "No records found." %}</p>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  </form>
+
+  {% include "dashboard/partials/pagination.html" %}
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const selectAll = document.getElementById('selectAll');
+    const rowBoxes = document.querySelectorAll('.row-checkbox');
+    const bulkBtns = document.querySelectorAll('.bulk-btn');
+
+    function updateButtons() {
+      const any = Array.from(rowBoxes).some(c => c.checked);
+      bulkBtns.forEach(b => b.disabled = !any);
+    }
+
+    selectAll?.addEventListener('change', function() {
+      rowBoxes.forEach(cb => cb.checked = selectAll.checked);
+      updateButtons();
+    });
+
+    rowBoxes.forEach(cb => cb.addEventListener('change', updateButtons));
+  });
+
+  function submitBulk(action) {
+    const boxes = document.querySelectorAll('.row-checkbox:checked');
+    if (!boxes.length) return;
+    const form = document.getElementById('bulkForm');
+    document.getElementById('bulkActionInput').value = action;
+    // remove old selected inputs
+    form.querySelectorAll('input[name="selected_ids"]').forEach(i => i.remove());
+    boxes.forEach(cb => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'selected_ids';
+      input.value = cb.value;
+      form.appendChild(input);
+    });
+    form.submit();
+  }
+</script>
+{% endblock content %}

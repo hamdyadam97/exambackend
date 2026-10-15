@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Default light mode variables */
+:root {
+  --bg-body: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-header: #ffffff;
+  --bg-sidebar: #0f172a;
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+
+  /* Chart palette */
+  --chart-users: #6366f1;
+  --chart-users-fill: rgba(99, 102, 241, 0.12);
+  --chart-transactions: #10b981;
+  --chart-transactions-fill: rgba(16, 185, 129, 0.12);
+  --chart-trails: #f59e0b;
+  --chart-trails-fill: rgba(245, 158, 11, 0.12);
+  --chart-grid: rgba(148, 163, 184, 0.18);
+  --chart-ticks: #94a3b8;
+}
+
+/* Dark mode via data-theme attribute */
+[data-theme="dark"] {
+  --bg-body: #020617;
+  --bg-card: #0f172a;
+  --bg-header: #0f172a;
+  --bg-sidebar: #020617;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --border-color: #1e293b;
+
+  --chart-users: #818cf8;
+  --chart-users-fill: rgba(129, 140, 248, 0.16);
+  --chart-transactions: #34d399;
+  --chart-transactions-fill: rgba(52, 211, 153, 0.16);
+  --chart-trails: #fbbf24;
+  --chart-trails-fill: rgba(251, 191, 36, 0.16);
+  --chart-grid: rgba(148, 163, 184, 0.12);
+  --chart-ticks: #94a3b8;
+}
+
+body {
+  background-color: var(--bg-body);
+  color: var(--text-main);
+}
+
+.admin-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .admin-card {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+}
+
+.admin-header {
+  background-color: var(--bg-header);
+  border-color: var(--border-color);
+}
+
+.admin-sidebar {
+  background-color: var(--bg-sidebar);
+}
+
+/* RTL sidebar active indicator */
+.sidebar-link {
+  transition: all 0.2s ease;
+  border-inline-start: 4px solid transparent;
+}
+
+.sidebar-link:hover,
+.sidebar-link.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-inline-start-color: var(--color-brand-500);
+}
+
+/* Sticky table header */
+.admin-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--bg-header);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Toast / messages */
+.admin-message {
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Form focus ring */
+.admin-input:focus {
+  outline: none;
+  border-color: var(--color-brand-500);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+/* Chart legend dots */
+.legend-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  display: inline-block;
+}
+.legend-dot-users { background-color: var(--chart-users); }
+.legend-dot-transactions { background-color: var(--chart-transactions); }
+.legend-dot-trails { background-color: var(--chart-trails); }
+
+/* Modal backdrop */
+.admin-modal-backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Textarea minimum height */
+.admin-textarea {
+  min-height: 120px;
+}

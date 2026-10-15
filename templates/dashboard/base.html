@@ -1,0 +1,84 @@
+{% load static i18n dashboard_tags %}
+{% get_current_language as LANGUAGE_CODE %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}" dir="{% if LANGUAGE_CODE == 'ar' %}rtl{% else %}ltr{% endif %}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{% trans "Dashboard" %}{% endblock %} | RootsExams</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'admin/css/admin.css' %}?v=7">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  {% block extra_head %}{% endblock %}
+  <script>
+    (function() {
+      const theme = localStorage.getItem('theme') || 'light';
+      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.classList.add(theme === 'dark' ? 'dark' : 'light');
+    })();
+  </script>
+</head>
+<body class="font-sans antialiased min-h-screen"
+      x-data="adminShell()"
+      :class="{ 'dark': theme === 'dark' }"
+      @keydown.escape.window="mobileOpen = false">
+
+  <div class="flex min-h-screen">
+    <!-- Sidebar -->
+    {% include "dashboard/partials/sidebar.html" %}
+
+    <!-- Main wrapper -->
+    <div class="flex-1 flex flex-col min-w-0 transition-all duration-300"
+         :class="{ 'opacity-50 pointer-events-none': mobileOpen, 'lg:ms-64': !sidebarCollapsed, 'lg:ms-20': sidebarCollapsed }">
+      <!-- Header -->
+      {% include "dashboard/partials/header.html" %}
+
+      <!-- Main content -->
+      <main class="flex-1 p-4 lg:p-8">
+        <h1 class="text-xl lg:text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4">
+          {% block page_title %}{% trans "Dashboard" %}{% endblock %}
+        </h1>
+        {% include "dashboard/partials/breadcrumb.html" %}
+        {% include "dashboard/partials/messages.html" %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <!-- Confirmation modal placeholder -->
+  {% include "dashboard/partials/confirm_modal.html" %}
+
+  <script src="{% static 'admin/vendor/htmx.min.js' %}"></script>
+  <script defer src="{% static 'admin/vendor/alpine.min.js' %}"></script>
+  <script src="{% static 'admin/vendor/chart.js' %}"></script>
+  <script>
+    document.body.addEventListener('htmx:configRequest', function(evt) {
+      evt.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+    });
+  </script>
+  <script>
+    function adminShell() {
+      return {
+        mobileOpen: false,
+        sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true',
+        theme: localStorage.getItem('theme') || 'light',
+        toggleTheme() {
+          this.theme = this.theme === 'dark' ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-theme', this.theme);
+          document.documentElement.classList.toggle('dark', this.theme === 'dark');
+          document.documentElement.classList.toggle('light', this.theme === 'light');
+          localStorage.setItem('theme', this.theme);
+          window.dispatchEvent(new CustomEvent('adminthemechange'));
+        },
+        toggleSidebar() {
+          this.sidebarCollapsed = !this.sidebarCollapsed;
+          localStorage.setItem('sidebarCollapsed', this.sidebarCollapsed);
+        }
+      };
+    }
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

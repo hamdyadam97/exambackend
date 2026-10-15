@@ -1,0 +1,27 @@
+{% extends "dashboard/base.html" %}
+{% load i18n dashboard_tags %}
+
+{% block title %}{% trans "Delete" %} {{ config.verbose_name|ar }}{% endblock %}
+{% block page_title %}{% trans "Delete" %} {{ config.verbose_name|ar }}{% endblock %}
+
+{% block content %}
+<div class="admin-card rounded-2xl shadow-sm max-w-xl mx-auto p-8 text-center">
+  <div class="w-16 h-16 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
+    <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+  </div>
+  <h2 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">{% trans "Are you sure?" %}</h2>
+  <p class="text-slate-500 dark:text-slate-400 mb-6">
+    {% blocktrans with name=config.verbose_name|ar pk=object.pk %}You are about to delete <strong>{{ name }} #{{ pk }}</strong>. This action cannot be undone.{% endblocktrans %}
+  </p>
+
+  <form method="post" class="flex items-center justify-center gap-3">
+    {% csrf_token %}
+    <a href="{% url 'dashboard:list' section %}" class="px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium transition">
+      {% trans "Cancel" %}
+    </a>
+    <button type="submit" class="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium transition inline-flex items-center gap-2">
+      <i class="fa-solid fa-trash"></i> {% trans "Delete" %}
+    </button>
+  </form>
+</div>
+{% endblock content %}

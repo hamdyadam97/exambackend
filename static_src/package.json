@@ -1,0 +1,19 @@
+{
+  "name": "rootsexams-admin-assets",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build:css": "npx tailwindcss -i ./input.css -o ../static/admin/css/admin.css --minify",
+    "build:js": "node copy-vendor.js",
+    "build": "npm run build:css && npm run build:js",
+    "watch:css": "npx tailwindcss -i ./input.css -o ../static/admin/css/admin.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  },
+  "dependencies": {
+    "alpinejs": "^3.15.12",
+    "chart.js": "^4.5.1",
+    "htmx.org": "^1.9.12"
+  }
+}

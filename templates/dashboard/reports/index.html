@@ -1,0 +1,113 @@
+{% extends "dashboard/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Reports & Analytics" %}{% endblock %}
+{% block page_title %}{% trans "Reports & Analytics" %}{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6 mb-8">
+  {% include "dashboard/partials/stat_card.html" with label=_('Total Students') value=stats.users icon='fa-users' icon_bg='bg-brand-50 dark:bg-brand-900/30' icon_color='text-brand-600 dark:text-brand-400' %}
+  {% include "dashboard/partials/stat_card.html" with label=_('Total Questions') value=stats.questions icon='fa-circle-question' icon_bg='bg-emerald-50 dark:bg-emerald-900/30' icon_color='text-emerald-600 dark:text-emerald-400' %}
+  {% include "dashboard/partials/stat_card.html" with label=_('Active Subscriptions') value=stats.active_subscriptions icon='fa-credit-card' icon_bg='bg-cyan-50 dark:bg-cyan-900/30' icon_color='text-cyan-600 dark:text-cyan-400' %}
+  {% include "dashboard/partials/stat_card.html" with label=_('Pass Rate') value=stats.pass_rate|add:'%' icon='fa-chart-line' icon_bg='bg-green-50 dark:bg-green-900/30' icon_color='text-green-600 dark:text-green-400' %}
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+  <div class="admin-card rounded-2xl p-6 shadow-sm">
+    <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-4">{% trans "New Students (Last 30 Days)" %}</h2>
+    <div class="relative h-72">
+      <canvas id="usersChart"></canvas>
+    </div>
+  </div>
+  <div class="admin-card rounded-2xl p-6 shadow-sm">
+    <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-4">{% trans "Subscriptions & Revenue (Last 30 Days)" %}</h2>
+    <div class="relative h-72">
+      <canvas id="revenueChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+  <div class="admin-card rounded-2xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+      <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">{% trans "Top Students by Score" %}</h2>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+        <tr>
+          <th class="px-6 py-3 font-medium text-start">{% trans "Name" %}</th>
+          <th class="px-6 py-3 font-medium text-start">{% trans "Phone" %}</th>
+          <th class="px-6 py-3 font-medium text-start">{% trans "Score" %}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+        {% for s in top_students %}
+        <tr>
+          <td class="px-6 py-3 text-slate-800 dark:text-slate-200 font-medium">{{ s.full_name|default:"—" }}</td>
+          <td class="px-6 py-3 text-slate-500 dark:text-slate-400">{{ s.phone|default:"—" }}</td>
+          <td class="px-6 py-3 text-brand-600 font-bold">{{ s.score|default:0 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="px-6 py-8 text-center text-slate-400">{% trans "No data" %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="admin-card rounded-2xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+      <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">{% trans "Top Categories by Questions" %}</h2>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+        <tr>
+          <th class="px-6 py-3 font-medium text-start">{% trans "Category" %}</th>
+          <th class="px-6 py-3 font-medium text-start">{% trans "Questions" %}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+        {% for c in top_categories %}
+        <tr>
+          <td class="px-6 py-3 text-slate-800 dark:text-slate-200 font-medium">{{ c.name }}</td>
+          <td class="px-6 py-3 text-slate-500 dark:text-slate-400">{{ c.q_count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2" class="px-6 py-8 text-center text-slate-400">{% trans "No data" %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const labels = {{ chart_labels|safe }};
+    new Chart(document.getElementById('usersChart'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '{% trans "Students" %}',
+          data: {{ users_chart|safe }},
+          backgroundColor: '#6366f1',
+          borderRadius: 4,
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.2)' }, ticks: { color: '#94a3b8' } }, x: { grid: { display: false }, ticks: { color: '#94a3b8' } } } }
+    });
+    new Chart(document.getElementById('revenueChart'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: '{% trans "Subscriptions" %}', data: {{ subscriptions_chart|safe }}, borderColor: '#10b981', tension: 0.4 },
+          { label: '{% trans "Transactions" %}', data: {{ revenue_chart|safe }}, borderColor: '#f59e0b', tension: 0.4 }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: '#94a3b8' } } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.2)' }, ticks: { color: '#94a3b8' } }, x: { grid: { display: false }, ticks: { color: '#94a3b8' } } } }
+    });
+  });
+</script>
+{% endblock extra_js %}

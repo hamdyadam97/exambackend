@@ -1,0 +1,424 @@
+#
+msgid ""
+msgstr ""
+"Language: ar\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5\n"
+
+msgid "+{count} in last 30 days"
+msgstr "+{count} في آخر 30 يوم"
+
+msgid "Actions"
+msgstr "إجراءات"
+
+msgid "Activity (Last 30 Days)"
+msgstr "النشاط (آخر 30 يوم)"
+
+msgid "Add"
+msgstr "إضافة"
+
+msgid "Add Exam"
+msgstr "إضافة امتحان"
+
+msgid "Add New"
+msgstr "إضافة جديد"
+
+msgid "Add New Exam"
+msgstr "إضافة امتحان جديد"
+
+msgid "Add New Question"
+msgstr "إضافة سؤال جديد"
+
+msgid "Add Question"
+msgstr "إضافة سؤال"
+
+msgid "Amount"
+msgstr "مبلغ"
+
+msgid "Answer Text"
+msgstr "نص الإجابة"
+
+msgid "Answer Type"
+msgstr "نوع الإجابة"
+
+msgid "Answers"
+msgstr "الإجابات"
+
+msgid "Archive"
+msgstr "أرشفة"
+
+msgid "Archive this record?"
+msgstr "أرشفة هذا السجل؟"
+
+msgid "Are you sure?"
+msgstr "هل أنت متأكد؟"
+
+msgid "Attempts Allowed"
+msgstr "المحاولات المسموحة"
+
+msgid "Auto Save"
+msgstr "الحفظ التلقائي"
+
+msgid "Basic Info"
+msgstr "معلومات أساسية"
+
+msgid "Basic Information"
+msgstr "معلومات أساسية"
+
+msgid "Build an exam and manage its questions."
+msgstr "أنشئ امتحانًا وأدِر أسئلته."
+
+msgid "CSV File"
+msgstr "ملف CSV"
+
+msgid "Cancel"
+msgstr "إلغاء"
+
+msgid "Categorization"
+msgstr "التصنيف"
+
+msgid "Category"
+msgstr "القسم"
+
+msgid "Certificate Available"
+msgstr "الشهادة متاحة"
+
+msgid "Confirm"
+msgstr "تأكيد"
+
+msgid "Correct"
+msgstr "صحيح"
+
+msgid "Could not parse file: "
+msgstr "Could not parse file:"
+
+msgid "Create the question, answers, and mark the correct one."
+msgstr "أنشئ السؤال والإجابات وحدّد الإجابة الصحيحة."
+
+msgid "Dashboard"
+msgstr "لوحة التحكم"
+
+msgid "Dashboard Overview"
+msgstr "نظرة عامة على لوحة التحكم"
+
+msgid "Delete"
+msgstr "حذف"
+
+msgid "Description"
+msgstr "الوصف"
+
+msgid "Difficulty"
+msgstr "الصعوبة"
+
+msgid "Duplicate"
+msgstr "تكرار"
+
+msgid "Duplicate this record?"
+msgstr "تكرار هذا السجل؟"
+
+msgid "Duration (minutes)"
+msgstr "المدة (دقيقة)"
+
+msgid "Edit"
+msgstr "تعديل"
+
+msgid "Edit Exam"
+msgstr "تعديل الامتحان"
+
+msgid "Edit Question"
+msgstr "تعديل السؤال"
+
+msgid "Exam"
+msgstr "الامتحان"
+
+msgid "Exam Trails"
+msgstr "مسارات الامتحان"
+
+msgid "Exam Type"
+msgstr "نوع الامتحان"
+
+msgid "Expected columns"
+msgstr "الأعمدة المتوقعة"
+
+msgid "Export"
+msgstr "تصدير"
+
+msgid "Failed"
+msgstr "فاشل"
+
+msgid "Featured"
+msgstr "مميز"
+
+msgid "Filter"
+msgstr "تصفية"
+
+msgid "First"
+msgstr "الأول"
+
+msgid "Hint"
+msgstr "تلميح"
+
+msgid "Home"
+msgstr "الرئيسية"
+
+msgid "Icon URL"
+msgstr "رابط الأيقونة"
+
+msgid "Import"
+msgstr "استيراد"
+
+msgid "Imported {count} records."
+msgstr "تم استيراد {count} سجل."
+
+msgid "Instant Result"
+msgstr "النتيجة الفورية"
+
+msgid "Instructions"
+msgstr "التعليمات"
+
+msgid "Instructor"
+msgstr "المحاضر"
+
+msgid "Invoices"
+msgstr "الفواتير"
+
+msgid "Joined"
+msgstr "انضم"
+
+msgid "Language"
+msgstr "اللغة"
+
+msgid "Last"
+msgstr "الأخير"
+
+msgid "Latest Students"
+msgstr "أحدث الطلاب"
+
+msgid "Latest Transactions"
+msgstr "أحدث المعاملات"
+
+msgid "Logout"
+msgstr "تسجيل الخروج"
+
+msgid "Manage and organize"
+msgstr "إدارة وتنظيم"
+
+msgid "Management Dashboard"
+msgstr "لوحة إدارة RootsExams"
+
+msgid "Media & Display"
+msgstr "الوسائط والعرض"
+
+msgid "Name"
+msgstr "الاسم"
+
+msgid "New Students (Last 30 Days)"
+msgstr "طلاب جدد (آخر 30 يوم)"
+
+msgid "Next"
+msgstr "التالي"
+
+msgid "No data"
+msgstr "لا توجد بيانات"
+
+msgid "No file uploaded."
+msgstr "لم يتم رفع أي ملف."
+
+msgid "No modules available"
+msgstr "لا توجد وحدات متاحة"
+
+msgid "No records found."
+msgstr "لم يُعثر على سجلات."
+
+msgid "No students yet"
+msgstr "لا يوجد طلاب بعد"
+
+msgid "No transactions yet"
+msgstr "لا توجد معاملات بعد"
+
+msgid "Notes / Explanation"
+msgstr "ملاحظات / شرح"
+
+msgid "Order"
+msgstr "الترتيب"
+
+msgid "Overview"
+msgstr "نظرة عامة"
+
+msgid "Page {{ number }} of {{ total }}"
+msgstr "صفحة {{ number }} من {{ total }}"
+
+msgid "Pending Testimonials"
+msgstr "الآراء المعلّقة"
+
+msgid "Phone"
+msgstr "رقم الهاتف"
+
+msgid "Previous"
+msgstr "السابق"
+
+msgid "Profile"
+msgstr "الملف الشخصي"
+
+msgid "Progress Tracking"
+msgstr "تتبّع التقدم"
+
+msgid "Question"
+msgstr "السؤال"
+
+msgid "Question Text"
+msgstr ""
+
+msgid "Questions"
+msgstr "الأسئلة"
+
+msgid "Random Questions"
+msgstr "أسئلة عشوائية"
+
+msgid "Remove"
+msgstr "إزالة"
+
+msgid "Reports & Analytics"
+msgstr "التقارير والتحليلات"
+
+msgid "Requirements"
+msgstr "المتطلبات"
+
+msgid "Reset"
+msgstr "إعادة تعيين"
+
+msgid "Restore"
+msgstr "استعادة"
+
+msgid "Review the information before saving."
+msgstr "راجِع المعلومات قبل الحفظ."
+
+msgid "Rules & Policies"
+msgstr "القواعد والسياسات"
+
+msgid "Save"
+msgstr "حفظ"
+
+msgid "Save Exam"
+msgstr "حفظ الامتحان"
+
+msgid "Save Question"
+msgstr "حفظ السؤال"
+
+msgid "Score"
+msgstr "النتيجة"
+
+msgid "Search..."
+msgstr "بحث..."
+
+msgid "Select all"
+msgstr "تحديد الكل"
+
+msgid "Settings"
+msgstr "الإعدادات"
+
+msgid "Show Answer"
+msgstr "عرض الإجابة"
+
+msgid "Show Explanation"
+msgstr "عرض الشرح"
+
+msgid "Show Hint"
+msgstr "عرض التلميح"
+
+msgid "Show Video"
+msgstr "عرض الفيديو"
+
+msgid "Specialty / Category"
+msgstr "التخصص / القسم"
+
+msgid "Status"
+msgstr "الحالة"
+
+msgid "Students"
+msgstr "الطلاب"
+
+msgid "Sub Category"
+msgstr "القسم الفرعي"
+
+msgid "Sub-Sub Category"
+msgstr "القسم الفرعي الأصغر"
+
+msgid "Subscriptions"
+msgstr "الاشتراكات"
+
+msgid "Subscriptions & Revenue (Last 30 Days)"
+msgstr "الاشتراكات والإيرادات (آخر 30 يوم)"
+
+msgid "Success"
+msgstr "ناجح"
+
+msgid "System Status"
+msgstr "حالة النظام"
+
+msgid "Time (minutes)"
+msgstr "الوقت (دقيقة)"
+
+msgid "Timer"
+msgstr "المؤقت"
+
+msgid "Title"
+msgstr "العنوان"
+
+msgid "Top Categories by Questions"
+msgstr "أعلى الأقسام بالأسئلة"
+
+msgid "Top Students by Score"
+msgstr "أفضل الطلاب بالنتيجة"
+
+msgid "Transactions"
+msgstr "المعاملات"
+
+msgid "Upload a CSV file with column headers matching the model fields."
+msgstr "ارفع ملف CSV تحتوي رؤوس أعمدته على حقول النموذج."
+
+msgid "User"
+msgstr "مستخدم"
+
+msgid "Users"
+msgstr "المستخدمين"
+
+msgid "Video Link"
+msgstr "رابط الفيديو"
+
+msgid "View all"
+msgstr "عرض الكل"
+
+msgid ""
+"You are about to delete <strong>{{ name }} #{{ pk }}</strong>. This action "
+"cannot be undone."
+msgstr ""
+"أنت على وشك حذف <strong>{{ name }} #{{ pk }}</strong>. لا يمكن التراجع عن "
+"هذا الإجراء."
+
+msgid "{count} successful transactions"
+msgstr "{count} معاملة ناجحة"
+
+msgid "Total Students"
+msgstr "إجمالي الطلاب"
+
+msgid "Total Questions"
+msgstr "إجمالي الأسئلة"
+
+msgid "Total Exams"
+msgstr "إجمالي الامتحانات"
+
+msgid "Active Subscriptions"
+msgstr "الاشتراكات النشطة"
+
+msgid "Revenue"
+msgstr "الإيرادات"
+
+msgid "Certificates"
+msgstr "الشهادات"
+
+msgid "Pass Rate"
+msgstr "معدل النجاح"
+
+msgid "Open Support"
+msgstr "الدعم المفتوح"
