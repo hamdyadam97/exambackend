@@ -1,9 +1,13 @@
 """
 Exam and question models.
 """
+import random
+from datetime import timedelta
+
 from django.db import models
 from django.db.models import Q
 from django.conf import settings
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 
@@ -271,7 +275,6 @@ class Exam(models.Model):
         blank=True,
     )
     attempts_allowed = models.PositiveIntegerField(default=1)
-    certificate_available = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
     language = models.CharField(max_length=50, null=True, blank=True)
     exam_type = models.CharField(max_length=50, choices=list(EXAM_TYPE_CHOICES.items()), null=True, blank=True)
@@ -285,13 +288,6 @@ class Exam(models.Model):
     has_timer = models.BooleanField(default=True)
     has_random_questions = models.BooleanField(default=True)
     has_progress_tracking = models.BooleanField(default=True)
-    instructor = models.ForeignKey(
-        'content.Instructor',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='exams'
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -500,6 +496,15 @@ class ExamTrail(models.Model):
     stages = models.JSONField(null=True, blank=True)
     current_stage = models.PositiveIntegerField(default=1)
     status = models.CharField(max_length=50, default='in_progress')
+    # Set when the trail is an attempt at a ready-made Exam rather than a custom build.
+    user_exam = models.ForeignKey(
+        UserExam,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='trails'
+    )
+    duration_minutes = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -668,6 +673,102 @@ class ExamTrail(models.Model):
             question_id__in=credential_questions,
             is_marked=True
         ).values_list('question_id', flat=True).distinct())
+
+    # Answers sent this long after the deadline are still accepted, to absorb network latency.
+    DEADLINE_GRACE_SECONDS = 15
+
+    def reveals_answers(self):
+        """Whether results may be shown: tutor mode shows them as you go, exam mode only after submitting."""
+        return self.mode == self.MODE_TUTOR or self.status == 'completed'
+
+    def reveals_question(self, question_id):
+        """Whether the correct answer and explanation of one question may be shown."""
+        if self.status == 'completed':
+            return True
+        return self.mode == self.MODE_TUTOR and self.details.filter(
+            question_id=question_id, answer__isnull=False,
+        ).exists()
+
+    def grade(self, question_id, answer_id):
+        """Grade an answer against the stored correct answer; None when the answer is cleared."""
+        if answer_id is None:
+            return None
+        question = Question.objects.only('correct_answer_id').get(pk=question_id)
+        return question.correct_answer_id == answer_id
+
+    @property
+    def deadline(self):
+        if not self.duration_minutes or not self.created_at:
+            return None
+        return self.created_at + timedelta(minutes=self.duration_minutes)
+
+    def remaining_seconds(self):
+        """Seconds left before the deadline, or None for an untimed exam."""
+        if self.deadline is None:
+            return None
+        return max(0, int((self.deadline - timezone.now()).total_seconds()))
+
+    def is_expired(self):
+        deadline = self.deadline
+        return deadline is not None and timezone.now() > deadline + timedelta(seconds=self.DEADLINE_GRACE_SECONDS)
+
+    def finish(self):
+        """Close the trail, store its score, and record the attempt for ready-made exams."""
+        total = self.details.count()
+        correct = self.details.filter(is_correct=True).count()
+        self.status = 'completed'
+        self.total_questions = total
+        self.correct_answers = correct
+        self.wrong_answers = total - correct
+        self.save()
+
+        user_exam = self.user_exam
+        if user_exam and user_exam.status != UserExam.STATUS_SUBMITTED:
+            user_exam.status = UserExam.STATUS_SUBMITTED
+            user_exam.correct_answers = correct
+            user_exam.wrong_answers = total - correct
+            user_exam.score = round(correct * 100 / total) if total else 0
+            user_exam.end_date = timezone.now().date()
+            user_exam.save()
+
+    @classmethod
+    def start_from_exam(cls, user, exam, user_exam):
+        """Create a trail that replays a ready-made Exam's question list."""
+        question_ids = list(
+            exam.exam_questions.filter(
+                deleted_at__isnull=True,
+                question__status=Question.ACTIVE,
+                question__deleted_at__isnull=True,
+            ).order_by('order', 'id').values_list('question_id', flat=True)
+        )
+        if not question_ids:
+            raise ValueError('This exam has no questions yet.')
+        if exam.has_random_questions:
+            random.shuffle(question_ids)
+
+        trail = cls.objects.create(
+            user=user,
+            title=exam.title or 'Exam',
+            mode=cls.MODE_EXAM,
+            question_mode=cls.QUESTION_MODE_ALL,
+            is_timed_mode=exam.has_timer,
+            duration_minutes=exam.duration_minutes if exam.has_timer else None,
+            question_count=len(question_ids),
+            user_exam=user_exam,
+        )
+        if exam.category_id:
+            trail.categories.set([exam.category_id])
+        if exam.sub_category_id:
+            trail.sub_categories.set([exam.sub_category_id])
+        if exam.sub_sub_category_id:
+            trail.sub_sub_categories.set([exam.sub_sub_category_id])
+        trail.generate_stages()
+        trail.save()
+        # Details are read back ordered by id, so bulk_create keeps the exam's order.
+        ExamTrialDetail.objects.bulk_create(
+            [ExamTrialDetail(exam_trail=trail, question_id=qid) for qid in question_ids]
+        )
+        return trail
 
     def get_current_stage_questions(self):
         all_ids = list(self.details.order_by('id').values_list('question_id', flat=True))

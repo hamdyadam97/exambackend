@@ -6,20 +6,17 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.db.models import Count, Q, Prefetch
 from apps.content.models import (
     Category, QuestionsTopic, ExamSection,
-    Blog, BlogComment, Testimonial, ContactMessage, SupportRequest, Instructor,
-    Faq, AppInfo, Partner, Notification, NotificationReceipt, AiInstruction, Setting,
-    Certificate,
+    Blog, BlogComment, Testimonial, ContactMessage, SupportRequest,
+    AppInfo, Partner, Notification, NotificationReceipt, AiInstruction, Setting,
 )
 from apps.content.serializers import (
     CategoryResource, TopicResource, SectionResource, BlogResource,
     BlogCommentResource, TestimonialResource, ContactMessageSerializer,
-    SupportRequestSerializer, InstructorResource, FaqResource,
+    SupportRequestSerializer,
     AppInfoResource, PartnerResource, NotificationResource,
-    CertificateResource,
 )
 from apps.exams.models import Question
 from apps.packages.models import Package
-from apps.users.models import User
 from apps.packages.serializers import PackageResource
 from apps.core.utils import api_response, send_response, send_error, api_get, api_post
 from apps.core.services import OpenAiService
@@ -64,16 +61,34 @@ class HomeView(BaseApiView):
         user = request.user
         categories_count = user.subscribed_categories().count()
         subcategories_count = user.subscribed_sub_categories().count()
-        active_subscriptions = user.active_subscriptions().count()
-        total_answered = user.exam_trails.aggregate(
-            total=Count('details', filter=Q(details__answer_id__isnull=False))
-        )['total'] or 0
+        active_subs = user.active_subscriptions().select_related('package').order_by('end_date')
+        # Exam-mode trails still in progress are excluded so their grading stays hidden.
+        answers = user.exam_trails.filter(Q(status='completed') | Q(mode='tatur')).aggregate(
+            answered=Count('details', filter=Q(details__answer_id__isnull=False)),
+            correct=Count('details', filter=Q(details__is_correct=True)),
+        )
+        total_answered = answers['answered'] or 0
+        total_correct = answers['correct'] or 0
+
+        completed = user.exam_trails.filter(status='completed', total_questions__gt=0)
+        scores = [round(t.correct_answers * 100 / t.total_questions) for t in completed.only('correct_answers', 'total_questions')]
+        current = active_subs.first()
 
         return send_response('success', {
             'categories_count': categories_count,
             'subcategories_count': subcategories_count,
-            'active_subscriptions': active_subscriptions,
+            'active_subscriptions': active_subs.count(),
             'total_answered': total_answered,
+            'total_correct': total_correct,
+            'success_rate': round(total_correct * 100 / total_answered) if total_answered else 0,
+            'completed_exams': len(scores),
+            'in_progress_exams': user.exam_trails.exclude(status='completed').count(),
+            'average_score': round(sum(scores) / len(scores)) if scores else 0,
+            'best_score': max(scores) if scores else 0,
+            'current_package': {
+                'name': current.package.name,
+                'end_date': current.end_date,
+            } if current else None,
         })
 
 
@@ -235,38 +250,6 @@ class BlogCommentView(BaseApiView):
         })
 
 
-class InstructorsView(BaseApiView):
-    permission_classes = [AllowAny]
-
-    @api_get('Instructors')
-    def get(self, request):
-        instructors = Instructor.objects.filter(status=Instructor.ACTIVE)
-        featured = instructors.filter(is_featured=True).order_by('order', '-created_at')[:6]
-        all_instructors = instructors.order_by('-is_featured', 'order', '-created_at')
-        faqs = Faq.objects.filter(status=Faq.ACTIVE).order_by('order', '-created_at')[:10]
-        testimonials = Testimonial.objects.filter(status=Testimonial.APPROVED).order_by('-created_at')[:10]
-
-        from django.db.models import Sum
-        stats = Instructor.objects.filter(status=Instructor.ACTIVE).aggregate(
-            total_experience=Sum('years_of_experience'),
-            certificates=Sum('certificates_count'),
-        )
-
-        return api_response(True, 'Fetched Successfully', {
-            'featured': InstructorResource(featured, many=True, context={'request': request}).data,
-            'instructors': InstructorResource(all_instructors, many=True, context={'request': request}).data,
-            'faqs': FaqResource(faqs, many=True).data,
-            'testimonials': TestimonialResource(testimonials, many=True).data,
-            'stats': {
-                'total_instructors': instructors.count(),
-                'total_students': User.objects.filter(role_type=User.ROLE_USER, status=User.ACTIVE).count(),
-                'total_courses': Package.objects.filter(status=Package.ACTIVE, deleted_at__isnull=True).count(),
-                'certificates_issued': stats['certificates'] or 0,
-                'years_of_experience': stats['total_experience'] or 0,
-            },
-        })
-
-
 class TestimonialsView(BaseApiView):
     permission_classes = [AllowAny]
 
@@ -352,54 +335,4 @@ class PaymentTypesView(BaseApiView):
         types = PaymentType.objects.filter(status=1)
         return api_response(True, 'Fetched Successfully', {
             'payment_types': PaymentTypeResource(types, many=True).data,
-        })
-
-
-class CertificatesPageView(BaseApiView):
-    permission_classes = [AllowAny]
-
-    @api_get('CertificatesPage')
-    def get(self, request):
-        certificates = Certificate.objects.filter(status=Certificate.ACTIVE, deleted_at__isnull=True)
-        featured = certificates.filter(is_featured=True).order_by('order', '-created_at')[:6]
-        all_certs = certificates.order_by('order', '-created_at')
-        faqs = Faq.objects.filter(status=Faq.ACTIVE).order_by('order', '-created_at')[:10]
-        testimonials = Testimonial.objects.filter(status=Testimonial.APPROVED).order_by('-created_at')[:6]
-
-        stats = {
-            'certificates_issued': certificates.count(),
-            'certified_students': certificates.values('student_name').distinct().count() or certificates.values('user').distinct().count(),
-            'partner_organizations': Partner.objects.filter(status=Partner.ACTIVE).count(),
-            'available_programs': Package.objects.filter(status=Package.ACTIVE, deleted_at__isnull=True).count(),
-        }
-
-        return api_response(True, 'Fetched Successfully', {
-            'featured': CertificateResource(featured, many=True, context={'request': request}).data,
-            'certificates': CertificateResource(all_certs, many=True, context={'request': request}).data,
-            'faqs': FaqResource(faqs, many=True).data,
-            'testimonials': TestimonialResource(testimonials, many=True).data,
-            'stats': stats,
-        })
-
-
-class CertificateVerifyView(BaseApiView):
-    permission_classes = [AllowAny]
-
-    @api_post('CertificateVerify')
-    def post(self, request):
-        certificate_id = request.data.get('certificate_id', '').strip()
-        student_name = request.data.get('student_name', '').strip()
-        if not certificate_id:
-            return send_error('Validation error', {'certificate_id': ['Certificate ID is required']})
-
-        qs = Certificate.objects.filter(certificate_id=certificate_id, status=Certificate.ACTIVE, deleted_at__isnull=True)
-        if student_name:
-            qs = qs.filter(student_name__icontains=student_name)
-
-        certificate = qs.first()
-        if not certificate:
-            return send_error('Certificate not found', {'certificate': ['No verified certificate matches the provided details']})
-
-        return api_response(True, 'Certificate verified', {
-            'certificate': CertificateResource(certificate, context={'request': request}).data,
         })

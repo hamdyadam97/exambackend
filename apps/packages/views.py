@@ -10,8 +10,8 @@ from apps.packages.serializers import (
     PackageResource, UserPackageResource, CheckCouponSerializer, SubscribeSerializer,
 )
 from apps.payments.models import PaymentTransaction
-from apps.content.models import Category, Instructor, Faq, Testimonial
-from apps.content.serializers import CategoryResource, InstructorResource, FaqResource, TestimonialResource
+from apps.content.models import Category
+from apps.content.serializers import CategoryResource
 from apps.core.utils import api_response, send_response, send_error, api_get, api_post
 from apps.core.services import CouponService, HyperPayService
 from django.utils import timezone
@@ -100,47 +100,6 @@ class SubCategoryPackagesView(BaseApiView):
         ).order_by('-created_at')
         return api_response(True, 'Fetched Successfully', {
             'packages': PackageResource(packages, many=True, context={'request': request}).data,
-        })
-
-
-class CoursesView(BaseApiView):
-    permission_classes = [AllowAny]
-
-    @api_get('Courses')
-    def get(self, request):
-        packages = Package.objects.filter(status=Package.ACTIVE, is_trial=False, deleted_at__isnull=True)
-        featured = packages.filter(is_featured=True).order_by('-created_at')[:6]
-        all_courses = packages.order_by('-created_at')
-        categories = Category.objects.filter(status=Category.ACTIVE, level=Category.LEVEL_CATEGORY).annotate(
-            courses_count=Count('packages', filter=Q(packages__status=Package.ACTIVE, packages__deleted_at__isnull=True))
-        ).order_by('name')
-        instructors = Instructor.objects.filter(status=Instructor.ACTIVE).order_by('-created_at')
-        faqs = Faq.objects.filter(status=Faq.ACTIVE).order_by('order', '-created_at')[:10]
-        testimonials = Testimonial.objects.filter(status=Testimonial.APPROVED).order_by('-created_at')[:10]
-
-        from django.db.models import Sum
-        stats = packages.aggregate(
-            total_students=Sum('students_count'),
-            total_courses=Count('id'),
-        )
-        instructor_stats = Instructor.objects.filter(status=Instructor.ACTIVE).aggregate(
-            total_instructors=Count('id'),
-            certificates=Sum('certificates_count'),
-        )
-
-        return api_response(True, 'Fetched Successfully', {
-            'featured': PackageResource(featured, many=True, context={'request': request}).data,
-            'courses': PackageResource(all_courses, many=True, context={'request': request}).data,
-            'categories': CategoryResource(categories, many=True, context={'request': request}).data,
-            'instructors': InstructorResource(instructors, many=True, context={'request': request}).data,
-            'faqs': FaqResource(faqs, many=True).data,
-            'testimonials': TestimonialResource(testimonials, many=True).data,
-            'stats': {
-                'total_courses': stats['total_courses'] or 0,
-                'total_students': stats['total_students'] or 0,
-                'total_instructors': instructor_stats['total_instructors'] or 0,
-                'certificates_issued': instructor_stats['certificates'] or 0,
-            },
         })
 
 

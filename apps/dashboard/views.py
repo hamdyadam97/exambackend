@@ -17,7 +17,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 
 from apps.users.models import User
-from apps.content.models import Category, Blog, Testimonial, SupportRequest, Certificate
+from apps.content.models import Category, Blog, Testimonial, SupportRequest
 from apps.exams.models import Question, Exam, ExamTrail, UserExam
 from apps.packages.models import Package, UserPackage
 from apps.payments.models import PaymentTransaction, Invoice
@@ -61,7 +61,6 @@ class DashboardView(TemplateView):
                 total=Sum('amount')
             )['total'] or 0,
             'invoices': Invoice.objects.count(),
-            'certificates': Certificate.objects.count(),
             'pending_testimonials': Testimonial.objects.filter(status=Testimonial.PENDING).count(),
             'open_support': SupportRequest.objects.filter(status=SupportRequest.STATUS_OPEN).count(),
             'pass_rate': self._compute_pass_rate(),

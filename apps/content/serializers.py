@@ -5,8 +5,7 @@ from rest_framework import serializers
 from apps.content.models import (
     Category, QuestionsTopic, ExamSection,
     Blog, BlogComment, Testimonial, Notification, AppInfo, Partner,
-    ContactMessage, SupportRequest, Instructor, Faq, AiInstruction, Setting,
-    Certificate,
+    ContactMessage, SupportRequest, Faq, AiInstruction, Setting,
 )
 
 
@@ -141,34 +140,10 @@ class SupportRequestSerializer(serializers.ModelSerializer):
         fields = ['question_id', 'question_text', 'message']
 
 
-class InstructorResource(serializers.ModelSerializer):
-    category = CategoryResource(read_only=True)
-
-    class Meta:
-        model = Instructor
-        fields = [
-            'id', 'name', 'title', 'image', 'specialization', 'category', 'bio',
-            'years_of_experience', 'students_count', 'courses_count',
-            'certificates_count', 'rate', 'facebook', 'twitter', 'linkedin',
-            'is_featured', 'order', 'status', 'created_at',
-        ]
-
-
 class FaqResource(serializers.ModelSerializer):
     class Meta:
         model = Faq
         fields = ['id', 'question', 'answer', 'category', 'order', 'status', 'created_at']
-
-
-class CertificateResource(serializers.ModelSerializer):
-    class Meta:
-        model = Certificate
-        fields = [
-            'id', 'certificate_id', 'title', 'description', 'student_name',
-            'related_course', 'instructor_name', 'issuing_organization',
-            'issue_date', 'expiry_date', 'image', 'pdf_url',
-            'is_featured', 'is_verified', 'status', 'order', 'created_at',
-        ]
 
 
 class PartnerResource(serializers.ModelSerializer):

@@ -8,7 +8,7 @@ from apps.exams.models import (
     UserExamTrial, ExamTrail, ExamTrialDetail,
 )
 from apps.content.serializers import (
-    CategoryResource, SectionResource, TopicResource, InstructorResource, FaqResource,
+    CategoryResource, SectionResource, TopicResource, FaqResource,
 )
 from apps.core.utils import build_asset_url
 
@@ -46,6 +46,16 @@ class QuestionResource(serializers.ModelSerializer):
             'show_answer', 'is_show_answer_explanation', 'notes', 'answers',
         ]
 
+    # Hidden unless the view passes context={'reveal': True}, so answers never leak by default.
+    ANSWER_FIELDS = ('correct_answer_id', 'notes', 'answer_image', 'is_show_answer_explanation', 'show_answer')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not self.context.get('reveal'):
+            for field in self.ANSWER_FIELDS:
+                data[field] = None
+        return data
+
     def get_answer_type_str(self, obj):
         return Question.ANSWER_TYPE_CHOICES.get(obj.answer_type, '')
 
@@ -77,7 +87,7 @@ class ExamResource(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'icon', 'duration_minutes', 'score',
             'difficulty_level', 'difficulty_label', 'attempts_allowed',
-            'certificate_available', 'is_featured', 'status', 'order',
+            'is_featured', 'status', 'order',
             'category', 'sub_category', 'sub_sub_category',
             'questions_count', 'created_at', 'updated_at',
         ]
@@ -90,7 +100,6 @@ class ExamDetailResource(serializers.ModelSerializer):
     category = CategoryResource(read_only=True)
     sub_category = CategoryResource(read_only=True)
     sub_sub_category = CategoryResource(read_only=True)
-    instructor = InstructorResource(read_only=True)
     questions_count = serializers.SerializerMethodField()
     difficulty_label = serializers.CharField(source='get_difficulty_level_display', read_only=True)
     exam_type_label = serializers.CharField(source='get_exam_type_display', read_only=True)
@@ -102,13 +111,13 @@ class ExamDetailResource(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'icon', 'duration_minutes', 'score',
             'difficulty_level', 'difficulty_label', 'attempts_allowed',
-            'certificate_available', 'is_featured', 'status', 'order',
+            'is_featured', 'status', 'order',
             'language', 'exam_type', 'exam_type_label',
             'what_youll_be_tested_on', 'skills_covered', 'instructions',
             'requirements', 'rules_policies',
             'has_instant_result', 'has_auto_save', 'has_timer',
             'has_random_questions', 'has_progress_tracking', 'features',
-            'category', 'sub_category', 'sub_sub_category', 'instructor',
+            'category', 'sub_category', 'sub_sub_category',
             'questions_count', 'related_exams',
             'created_at', 'updated_at',
         ]
@@ -148,6 +157,21 @@ class ExamTrialDetailResource(serializers.ModelSerializer):
         model = ExamTrialDetail
         fields = ['id', 'question_id', 'answer_id', 'is_correct', 'is_marked']
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not instance.exam_trail.reveals_answers():
+            data['is_correct'] = None
+        return data
+
+
+def hide_scores(data, trail):
+    """Blank out score fields of an exam-mode trail that has not been submitted yet."""
+    if not trail.reveals_answers():
+        for field in ('correct_answers', 'wrong_answers'):
+            if field in data:
+                data[field] = None
+    return data
+
 
 class ExamTrialResource(serializers.ModelSerializer):
     categories = CategoryResource(many=True, read_only=True)
@@ -181,15 +205,27 @@ class ExamTrialIndexResource(serializers.ModelSerializer):
             'status', 'current_stage', 'categories', 'details_count', 'created_at',
         ]
 
+    def to_representation(self, instance):
+        return hide_scores(super().to_representation(instance), instance)
+
 
 class ShowExamTrialResource(serializers.ModelSerializer):
+    duration = serializers.IntegerField(source='duration_minutes', read_only=True)
+    remaining_seconds = serializers.SerializerMethodField()
+
     class Meta:
         model = ExamTrail
         fields = [
-            'id', 'title', 'mode', 'question_mode', 'is_timed_mode',
+            'id', 'title', 'mode', 'question_mode', 'is_timed_mode', 'duration', 'remaining_seconds',
             'question_count', 'total_questions', 'correct_answers',
             'wrong_answers', 'stages', 'current_stage', 'status',
         ]
+
+    def get_remaining_seconds(self, obj):
+        return obj.remaining_seconds()
+
+    def to_representation(self, instance):
+        return hide_scores(super().to_representation(instance), instance)
 
 
 class ExamStoreSerializer(serializers.Serializer):
@@ -200,6 +236,7 @@ class ExamStoreSerializer(serializers.Serializer):
         ('correct', 'Correct'), ('incorrect', 'InCorrect'), ('marked', 'Marked'),
     ], default='all')
     is_timed_mode = serializers.BooleanField(default=False)
+    duration_minutes = serializers.IntegerField(required=False, default=0, min_value=0, max_value=600)
     question_count = serializers.IntegerField(required=False, default=0)
     categories = serializers.ListField(child=serializers.IntegerField(), required=False, default=list)
     sub_categories = serializers.ListField(child=serializers.IntegerField(), required=False, default=list)
@@ -217,7 +254,7 @@ class StoreQuestionAnswerSerializer(serializers.Serializer):
 
 
 class StoreSingleQuestionAnswerSerializer(serializers.Serializer):
+    # Correctness is graded on the server; any is_correct sent by the client is ignored.
     question_id = serializers.IntegerField()
     answer_id = serializers.IntegerField(allow_null=True)
-    is_correct = serializers.BooleanField(required=False, default=False)
     is_marked = serializers.BooleanField(required=False, default=False)

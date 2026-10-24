@@ -20,7 +20,6 @@ ARABIC_LABELS = {
     'App Info': 'معلومات التطبيق',
     'Contact Messages': 'رسائل التواصل',
     'Support Requests': 'طلبات الدعم',
-    'Instructors': 'المحاضرين',
     'AI Instructions': 'تعليمات الذكاء الاصطناعي',
     'Settings': 'الإعدادات',
     'Questions': 'الأسئلة',

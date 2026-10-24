@@ -10,9 +10,8 @@ from apps.users.views import (
 from apps.content.views import (
     LandingView, HomeView, ContactView, CategoriesView, CategoryDetailView,
     SubCategoriesForCategoryView, GetCategoryView, GetSubcategoryView,
-    BlogsView, BlogDetailView, BlogCommentView, InstructorsView, TestimonialsView,
+    BlogsView, BlogDetailView, BlogCommentView, TestimonialsView,
     SupportView, ChatView, QuestionBanksView, PaymentTypesView, UserNotificationsView,
-    CertificatesPageView, CertificateVerifyView,
 )
 from apps.exams.views import (
     LegacyExamListView, ExamListView, ExamDetailView, ExamCreateView,
@@ -21,12 +20,12 @@ from apps.exams.views import (
     ExamQuestionsView, ExamQuestionDetailView, ExamCurrentStageView,
     ExamAdvanceStageView, ExamStageView, ExamStoreQuestionAnswerView,
     ExamStoreSingleQuestionAnswerView, ExamOverviewView, ExamFinishView,
-    ExamsPageView, ExamDetailPageView,
+    ExamsPageView, ExamDetailPageView, ExamStartView, StudentInsightsView,
 )
 from apps.packages.views import (
     PackageDataView, PackageListView, PackageDetailView, RelatedPackagesView,
     UserSubscriptionView, CheckCouponView,
-    SubscribeView, StoreSubscribeView, PackageCalculatePriceView, CoursesView,
+    SubscribeView, StoreSubscribeView, PackageCalculatePriceView,
     SubCategoryPackagesView,
 )
 from apps.payments.views import PaymentCallbackView, PaymentStatusView, PaymentInfoView, ConfirmPaymentView
@@ -51,12 +50,12 @@ urlpatterns = [
     # Home & Content
     path('landing/index', LandingView.as_view(), name='landing'),
     path('home', HomeView.as_view(), name='home'),
+    path('dashboard/insights', StudentInsightsView.as_view(), name='dashboard-insights'),
     path('contact', ContactView.as_view(), name='contact'),
     path('contactus', ContactView.as_view(), name='contactus'),
     path('blogs/index', BlogsView.as_view(), name='blogs-index'),
     path('blogs/<int:pk>', BlogDetailView.as_view(), name='blog-detail'),
     path('blogs/<int:pk>/comments', BlogCommentView.as_view(), name='blog-comments'),
-    path('instructors', InstructorsView.as_view(), name='instructors'),
     path('testimonials', TestimonialsView.as_view(), name='testimonials'),
     path('support', SupportView.as_view(), name='support'),
     path('chat', ChatView.as_view(), name='chat'),
@@ -76,10 +75,7 @@ urlpatterns = [
     # Public exams page
     path('exams', ExamsPageView.as_view(), name='exams-page'),
     path('exams/<int:pk>', ExamDetailPageView.as_view(), name='exam-detail-page'),
-
-    # Certificates
-    path('certificates', CertificatesPageView.as_view(), name='certificates-page'),
-    path('certificates/verify', CertificateVerifyView.as_view(), name='certificate-verify'),
+    path('exams/<int:pk>/start', ExamStartView.as_view(), name='exam-start'),
 
     # Legacy exams
     path('get-exams', LegacyExamListView.as_view(), name='get-exams'),
@@ -108,7 +104,6 @@ urlpatterns = [
     # Packages
     path('packages/data', PackageDataView.as_view(), name='package-data'),
     path('packages/index', PackageListView.as_view(), name='package-list'),
-    path('courses', CoursesView.as_view(), name='courses'),
     path('packages/<int:pk>/get', PackageDetailView.as_view(), name='package-detail'),
     path('packages/<int:pk>/related', RelatedPackagesView.as_view(), name='package-related'),
     path('packages/user-subscription', UserSubscriptionView.as_view(), name='user-subscription'),

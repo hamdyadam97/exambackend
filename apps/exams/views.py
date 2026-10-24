@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.db import transaction
 from django.db.models import Count, Q
+from django.utils import timezone
 from apps.exams.models import (
     Question, Answer, Exam, ExamTrail, ExamTrialDetail, UserExam, exam_classification_q,
 )
@@ -19,10 +20,21 @@ from apps.content.serializers import (
 )
 from apps.core.utils import api_response, send_response, send_error, api_get, api_post
 from apps.content.models import Setting
+from apps.exams.insights import student_insights
 
 
 class BaseApiView(APIView):
     pass
+
+
+def reject_if_closed(trail):
+    """Error response when a trail no longer accepts answers; a timed-out trail is finished on the spot."""
+    if trail.status == 'completed':
+        return send_error('Exam already finished', {'ExamFinished': ['This exam has already been submitted']}, 409)
+    if trail.is_expired():
+        trail.finish()
+        return send_error('Time is up', {'TimeUp': ['The time for this exam has ended']}, 409)
+    return None
 
 
 class ExamsPageView(BaseApiView):
@@ -54,7 +66,6 @@ class ExamsPageView(BaseApiView):
                 'total_exams': stats['total_exams'] or 0,
                 'total_questions': stats['total_questions'] or 0,
                 'total_attempts': UserExam.objects.count(),
-                'certificates_issued': stats['total_exams'] or 0,
             },
         }
 
@@ -91,6 +102,68 @@ class ExamDetailPageView(BaseApiView):
         return api_response(True, 'Fetched Successfully', data)
 
 
+class ExamStartView(BaseApiView):
+    """Start (or resume) an attempt at a ready-made exam and return the trail to play."""
+    permission_classes = [IsAuthenticated]
+
+    @api_post('ExamStart')
+    def post(self, request, pk):
+        try:
+            exam = Exam.objects.get(pk=pk, status=Exam.ACTIVE, deleted_at__isnull=True)
+        except Exam.DoesNotExist:
+            return send_error('Exam not found', {'ExamNotFound': ['No exam found for given id']})
+
+        user = request.user
+        if exam.category_id and not user.active_subscriptions().filter(
+            package__category_id=exam.category_id
+        ).exists():
+            return send_error(
+                'Subscription required',
+                {'SubscriptionRequired': ['Subscribe to a package for this specialty to take this exam']},
+                403,
+            )
+
+        in_progress = ExamTrail.objects.filter(
+            user=user, user_exam__exam=exam, user_exam__status=UserExam.STATUS_IN_PROGRESS,
+        ).exclude(status='completed').order_by('-created_at').first()
+        if in_progress:
+            if not in_progress.is_expired():
+                return api_response(True, 'Resumed', {'exam_id': in_progress.id, 'resumed': True})
+            # The time ran out while the student was away: that attempt counts as submitted.
+            in_progress.finish()
+
+        attempts_used = UserExam.objects.filter(
+            user=user, exam=exam, status=UserExam.STATUS_SUBMITTED, deleted_at__isnull=True,
+        ).count()
+        if exam.attempts_allowed and attempts_used >= exam.attempts_allowed:
+            return send_error(
+                'No attempts left',
+                {'AttemptsExhausted': [f'You have used all {exam.attempts_allowed} attempt(s) for this exam']},
+                403,
+            )
+
+        try:
+            with transaction.atomic():
+                user_exam = UserExam.objects.create(
+                    user=user, exam=exam,
+                    status=UserExam.STATUS_IN_PROGRESS,
+                    start_date=timezone.now().date(),
+                )
+                trail = ExamTrail.start_from_exam(user, exam, user_exam)
+        except ValueError as e:
+            return send_error(str(e), {'ExamEmpty': [str(e)]}, 422)
+
+        return api_response(True, 'Started', {'exam_id': trail.id, 'resumed': False})
+
+
+class StudentInsightsView(BaseApiView):
+    permission_classes = [IsAuthenticated]
+
+    @api_get('StudentInsights')
+    def get(self, request):
+        return api_response(True, 'Fetched Successfully', student_insights(request.user))
+
+
 class ExamListView(BaseApiView):
     permission_classes = [IsAuthenticated]
 
@@ -124,6 +197,13 @@ class ExamDetailView(BaseApiView):
             ).get(pk=exam_id, user=request.user)
         except ExamTrail.DoesNotExist:
             return send_error('Exam not found', {'ExamNotFound': ['No exam found for given exam_id']})
+
+        if not exam.reveals_answers():
+            return send_error(
+                'Exam in progress',
+                {'ExamInProgress': ['Results are available after the exam is submitted']},
+                409,
+            )
 
         data = {
             'exam': ExamTrialResource(exam, context={'request': request}).data,
@@ -439,6 +519,7 @@ class ExamStoreView(BaseApiView):
                     mode=data['exam_mode'],
                     question_mode=data['question_mode'],
                     is_timed_mode=data['is_timed_mode'],
+                    duration_minutes=(data['duration_minutes'] or None) if data['is_timed_mode'] else None,
                     question_count=data['question_count'],
                 )
                 exam.categories.set(data['categories'])
@@ -473,6 +554,9 @@ class ExamQuestionsView(BaseApiView):
             exam = ExamTrail.objects.prefetch_related('details', 'details__question').get(pk=exam_id, user=request.user)
         except ExamTrail.DoesNotExist:
             return send_error('Exam not found', {'ExamNotFound': ['No exam found for given exam_id']})
+
+        if exam.status != 'completed' and exam.is_expired():
+            exam.finish()
 
         stages = exam.stages or []
         current_stage = exam.current_stage or 1
@@ -509,18 +593,22 @@ class ExamQuestionDetailView(BaseApiView):
 
     @api_get('ExamQuestionDetail')
     def get(self, request, question_id):
-        owns = ExamTrail.objects.filter(
+        # The answer is revealed according to the exam it is viewed in, so that exam is required.
+        trail = ExamTrail.objects.filter(
+            pk=request.query_params.get('exam_id') or 0,
             user=request.user,
-            details__question_id=question_id
-        ).exists()
-        if not owns:
-            return send_error('Question not found', {'QuestionNotFound': ['No question found for given question_id that belongs to your exams']})
+            details__question_id=question_id,
+        ).first()
+        if not trail:
+            return send_error('Question not found', {'QuestionNotFound': ['No question found for given question_id that belongs to this exam']})
         try:
             question = Question.objects.get(pk=question_id)
         except Question.DoesNotExist:
             return send_error('Question not found', {'QuestionNotFound': ['No question found']})
         return api_response(True, 'Exam data', {
-            'question': QuestionResource(question, context={'request': request}).data,
+            'question': QuestionResource(
+                question, context={'request': request, 'reveal': trail.reveals_question(question_id)},
+            ).data,
         })
 
 
@@ -648,33 +736,33 @@ class ExamStoreQuestionAnswerView(BaseApiView):
         except ExamTrail.DoesNotExist:
             return send_error('Exam not found', {'ExamNotFound': ['No exam found for given exam_id']})
 
+        closed = reject_if_closed(exam)
+        if closed:
+            return closed
+
         serializer = StoreQuestionAnswerSerializer(data=request.data)
         if not serializer.is_valid():
             return send_error('Validation Errors', serializer.errors, 422)
 
         for item in serializer.validated_data.get('answers', []):
-            qid = item.get('question_id')
-            aid = item.get('answer_id')
-            is_correct = item.get('is_correct') in (True, 'true', 1, '1')
-            is_marked = item.get('is_marked') in (True, 'true', 1, '1')
+            try:
+                qid = int(item.get('question_id'))
+                aid = int(item['answer_id']) if item.get('answer_id') not in (None, '') else None
+            except (TypeError, ValueError):
+                return send_error('Validation Errors', {'answers': ['question_id and answer_id must be numbers']}, 422)
+            if aid is not None and not Answer.objects.filter(pk=aid, question_id=qid).exists():
+                return send_error('Validation Errors', {'answer_id': [f'Answer {aid} does not belong to question {qid}']}, 422)
             ExamTrialDetail.objects.filter(exam_trail=exam, question_id=qid).update(
                 answer_id=aid,
-                is_correct=is_correct,
-                is_marked=is_marked,
+                is_correct=exam.grade(qid, aid),
+                is_marked=item.get('is_marked') in (True, 'true', 1, '1'),
             )
 
-        total = exam.details.count()
-        correct = exam.details.filter(is_correct=True).count()
-        wrong = total - correct
-        exam.total_questions = total
-        exam.correct_answers = correct
-        exam.wrong_answers = wrong
-        exam.status = 'completed'
-        exam.save()
+        exam.finish()
         return api_response(True, 'Exam complete successfully', {
-            'total_questions': total,
-            'correct_answers': correct,
-            'wrong_answers': wrong,
+            'total_questions': exam.total_questions,
+            'correct_answers': exam.correct_answers,
+            'wrong_answers': exam.wrong_answers,
         })
 
 
@@ -688,31 +776,38 @@ class ExamStoreSingleQuestionAnswerView(BaseApiView):
         except ExamTrail.DoesNotExist:
             return send_error('Exam not found', {'ExamNotFound': ['No exam found for given exam_id']})
 
+        closed = reject_if_closed(exam)
+        if closed:
+            return closed
+
         serializer = StoreSingleQuestionAnswerSerializer(data=request.data)
         if not serializer.is_valid():
             return send_error('Validation Errors', serializer.errors, 422)
 
-        ExamTrialDetail.objects.filter(
-            exam_trail=exam,
-            question_id=serializer.validated_data['question_id']
-        ).update(
-            answer_id=serializer.validated_data.get('answer_id'),
-            is_correct=serializer.validated_data.get('is_correct', False),
+        qid = serializer.validated_data['question_id']
+        aid = serializer.validated_data.get('answer_id')
+        if not exam.details.filter(question_id=qid).exists():
+            return send_error('Question not found', {'QuestionNotFound': ['This question is not part of this exam']}, 422)
+        if aid is not None and not Answer.objects.filter(pk=aid, question_id=qid).exists():
+            return send_error('Validation Errors', {'answer_id': ['This answer does not belong to the question']}, 422)
+
+        is_correct = exam.grade(qid, aid)
+        exam.details.filter(question_id=qid).update(
+            answer_id=aid,
+            is_correct=is_correct,
             is_marked=serializer.validated_data.get('is_marked', False),
         )
 
-        total = exam.details.count()
-        correct = exam.details.filter(is_correct=True).count()
-        wrong = total - correct
-        exam.total_questions = total
-        exam.correct_answers = correct
-        exam.wrong_answers = wrong
-        exam.save()
-        return api_response(True, 'Exam complete successfully', {
-            'total_questions': total,
-            'correct_answers': correct,
-            'wrong_answers': wrong,
-        })
+        # Scores are computed when the exam is finished; until then only tutor mode reveals grading.
+        data = {'question_id': qid, 'answer_id': aid, 'is_correct': None}
+        if exam.reveals_answers() and aid is not None:
+            question = Question.objects.get(pk=qid)
+            data.update({
+                'is_correct': is_correct,
+                'correct_answer_id': question.correct_answer_id,
+                'notes': question.notes,
+            })
+        return api_response(True, 'Answer saved', data)
 
 
 class ExamOverviewView(BaseApiView):
@@ -781,19 +876,14 @@ class ExamFinishView(BaseApiView):
         except ExamTrail.DoesNotExist:
             return send_error('Exam not found', {'ExamNotFound': ['No exam found for given exam_id']})
 
-        exam.status = 'completed'
-        total = exam.details.count()
-        correct = exam.details.filter(is_correct=True).count()
-        exam.total_questions = total
-        exam.correct_answers = correct
-        exam.wrong_answers = total - correct
-        exam.save()
+        if exam.status != 'completed':
+            exam.finish()
         return api_response(True, 'Exam finished', {
             'id': exam.id,
             'status': exam.status,
-            'total_questions': total,
-            'correct_answers': correct,
-            'wrong_answers': total - correct,
+            'total_questions': exam.total_questions,
+            'correct_answers': exam.correct_answers,
+            'wrong_answers': exam.wrong_answers,
         })
 
 

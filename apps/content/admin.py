@@ -5,8 +5,7 @@ from apps.core.admin_site import admin_site
 from apps.content.models import (
     Category, QuestionsTopic, ExamSection,
     Blog, BlogComment, Testimonial, Notification, NotificationReceipt, AppInfo,
-    ContactMessage, SupportRequest, Instructor, Faq, AiInstruction, Setting,
-    Certificate,
+    ContactMessage, SupportRequest, Faq, AiInstruction, Setting,
 )
 
 
@@ -196,36 +195,6 @@ class SupportRequestAdmin(admin.ModelAdmin):
 
 
 admin_site.register(SupportRequest, SupportRequestAdmin)
-class InstructorAdmin(admin.ModelAdmin):
-    list_display = [
-        'name', 'title', 'specialization', 'category', 'years_of_experience',
-        'students_count', 'courses_count', 'rate', 'is_featured', 'status', 'created_at',
-    ]
-    list_filter = ['status', 'is_featured', 'specialization', 'category']
-    search_fields = ['name', 'title', 'specialization', 'bio']
-    autocomplete_fields = ['category']
-    readonly_fields = ['created_at', 'updated_at']
-    actions = ['activate', 'deactivate', 'feature', 'unfeature']
-
-    @admin.action(description=_('Activate selected instructors'))
-    def activate(self, request, queryset):
-        queryset.update(status=Instructor.ACTIVE)
-
-    @admin.action(description=_('Deactivate selected instructors'))
-    def deactivate(self, request, queryset):
-        queryset.update(status=Instructor.INACTIVE)
-
-    @admin.action(description=_('Mark as featured'))
-    def feature(self, request, queryset):
-        queryset.update(is_featured=True)
-
-    @admin.action(description=_('Remove featured flag'))
-    def unfeature(self, request, queryset):
-        queryset.update(is_featured=False)
-
-
-
-admin_site.register(Instructor, InstructorAdmin)
 class FaqAdmin(admin.ModelAdmin):
     list_display = ['question', 'category', 'order', 'status', 'created_at']
     list_filter = ['status', 'category']
@@ -264,20 +233,3 @@ class SettingAdmin(admin.ModelAdmin):
         return (obj.value or '')[:80]
 
 admin_site.register(Setting, SettingAdmin)
-
-
-class CertificateAdmin(admin.ModelAdmin):
-    list_display = [
-        'certificate_id', 'title', 'student_name', 'related_course',
-        'instructor_name', 'issuing_organization', 'issue_date',
-        'is_verified', 'is_featured', 'status', 'created_at',
-    ]
-    list_filter = ['status', 'is_verified', 'is_featured', 'issuing_organization', 'issue_date']
-    search_fields = ['certificate_id', 'title', 'student_name', 'related_course', 'instructor_name']
-    list_select_related = ['user']
-    autocomplete_fields = ['user']
-    date_hierarchy = 'created_at'
-    readonly_fields = ['created_at', 'updated_at']
-
-
-admin_site.register(Certificate, CertificateAdmin)

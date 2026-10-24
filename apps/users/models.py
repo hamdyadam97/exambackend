@@ -119,6 +119,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         return Category.objects.filter(
             packages__subscriptions__user=self,
             packages__subscriptions__subscription_status=1,
+            packages__subscriptions__end_date__gte=timezone.now().date(),
             level=Category.LEVEL_CATEGORY
         ).distinct()
 
@@ -128,6 +129,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         direct = Category.objects.filter(
             packages__subscriptions__user=self,
             packages__subscriptions__subscription_status=1,
+            packages__subscriptions__end_date__gte=timezone.now().date(),
             level=Category.LEVEL_SUB_CATEGORY
         ).distinct()
         if direct.exists():

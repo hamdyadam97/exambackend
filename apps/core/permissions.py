@@ -82,7 +82,6 @@ class HasPermission(permissions.BasePermission):
         'userpackage_access': [User.ROLE_ADMIN, User.ROLE_ACCOUNTANT, User.ROLE_DATA_ENTRY],
         'discountcode_access': [User.ROLE_ADMIN, User.ROLE_ACCOUNTANT, User.ROLE_DATA_ENTRY],
         'payment_type_access': [User.ROLE_ADMIN, User.ROLE_ACCOUNTANT, User.ROLE_DATA_ENTRY],
-        'instructor_access': [User.ROLE_ADMIN, User.ROLE_ACCOUNTANT, User.ROLE_DATA_ENTRY],
         'category_access': [User.ROLE_ADMIN, User.ROLE_ACCOUNTANT, User.ROLE_DATA_ENTRY],
         'subcategory_access': [User.ROLE_ADMIN, User.ROLE_ACCOUNTANT, User.ROLE_DATA_ENTRY],
         'sub_subcategory_access': [User.ROLE_ADMIN, User.ROLE_ACCOUNTANT, User.ROLE_DATA_ENTRY],

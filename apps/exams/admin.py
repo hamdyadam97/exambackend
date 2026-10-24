@@ -131,14 +131,14 @@ class ExamAdmin(admin.ModelAdmin):
     list_display = [
         'title', 'category', 'sub_category', 'sub_sub_category',
         'duration_minutes', 'question_count', 'difficulty_level',
-        'attempts_allowed', 'certificate_available', 'is_featured',
-        'exam_type', 'language', 'instructor', 'status', 'created_at',
+        'attempts_allowed', 'is_featured',
+        'exam_type', 'language', 'status', 'created_at',
     ]
-    list_filter = ['status', 'difficulty_level', 'certificate_available', 'is_featured', 'exam_type', 'language', 'category', 'created_at']
+    list_filter = ['status', 'difficulty_level', 'is_featured', 'exam_type', 'language', 'category', 'created_at']
     search_fields = ['title', 'description']
     inlines = [ExamQuestionInline]
-    autocomplete_fields = ['category', 'sub_category', 'sub_sub_category', 'instructor']
-    list_select_related = ['category', 'sub_category', 'sub_sub_category', 'instructor']
+    autocomplete_fields = ['category', 'sub_category', 'sub_sub_category']
+    list_select_related = ['category', 'sub_category', 'sub_sub_category']
     date_hierarchy = 'created_at'
     actions = ['publish', 'unpublish', 'make_featured', 'remove_featured']
     readonly_fields = ['created_at', 'updated_at', 'deleted_at']

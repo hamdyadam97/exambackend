@@ -258,47 +258,6 @@ class Testimonial(models.Model):
         return self.name
 
 
-class Instructor(models.Model):
-    ACTIVE = 1
-    INACTIVE = 0
-    STATUS_CHOICES = {ACTIVE: _('Active'), INACTIVE: _('Inactive')}
-
-    name = models.CharField(max_length=255)
-    image = models.URLField(max_length=500, null=True, blank=True)
-    title = models.CharField(max_length=255, null=True, blank=True)
-    specialization = models.CharField(max_length=255, null=True, blank=True)
-    bio = models.TextField(null=True, blank=True)
-    category = models.ForeignKey(
-        Category,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='instructors'
-    )
-    years_of_experience = models.PositiveIntegerField(default=0)
-    students_count = models.PositiveIntegerField(default=0)
-    courses_count = models.PositiveIntegerField(default=0)
-    certificates_count = models.PositiveIntegerField(default=0)
-    facebook = models.URLField(max_length=500, null=True, blank=True)
-    twitter = models.URLField(max_length=500, null=True, blank=True)
-    linkedin = models.URLField(max_length=500, null=True, blank=True)
-    rate = models.DecimalField(max_digits=3, decimal_places=1, default=0.0)
-    is_featured = models.BooleanField(default=False)
-    order = models.PositiveIntegerField(default=0)
-    status = models.IntegerField(choices=list(STATUS_CHOICES.items()), default=ACTIVE)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'instructors'
-        verbose_name = _('Instructor')
-        verbose_name_plural = _('Instructors')
-        ordering = ['order', '-created_at']
-
-    def __str__(self):
-        return self.name
-
-
 class Faq(models.Model):
     ACTIVE = 1
     INACTIVE = 0
@@ -493,52 +452,6 @@ class AiInstruction(models.Model):
         verbose_name = _('AI Instruction')
         verbose_name_plural = _('AI Instructions')
         ordering = ['-created_at']
-
-
-class Certificate(models.Model):
-    ACTIVE = 1
-    INACTIVE = 0
-    STATUS_CHOICES = {ACTIVE: _('Active'), INACTIVE: _('Inactive')}
-
-    certificate_id = models.CharField(max_length=100, unique=True, db_index=True)
-    title = models.CharField(max_length=255)
-    description = models.TextField(null=True, blank=True)
-    student_name = models.CharField(max_length=255, null=True, blank=True)
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='certificates'
-    )
-    related_course = models.CharField(max_length=255, null=True, blank=True)
-    instructor_name = models.CharField(max_length=255, null=True, blank=True)
-    issuing_organization = models.CharField(max_length=255, default='RootsExams')
-    issue_date = models.DateField(null=True, blank=True)
-    expiry_date = models.DateField(null=True, blank=True)
-    image = models.URLField(max_length=500, null=True, blank=True)
-    pdf_url = models.URLField(max_length=500, null=True, blank=True)
-    is_featured = models.BooleanField(default=False)
-    is_verified = models.BooleanField(default=True)
-    status = models.IntegerField(choices=list(STATUS_CHOICES.items()), default=ACTIVE)
-    order = models.PositiveIntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        db_table = 'certificates'
-        verbose_name = _('Certificate')
-        verbose_name_plural = _('Certificates')
-        ordering = ['order', '-created_at']
-        indexes = [
-            models.Index(fields=['status', 'is_featured']),
-            models.Index(fields=['certificate_id']),
-            models.Index(fields=['student_name']),
-        ]
-
-    def __str__(self):
-        return f'{self.certificate_id} - {self.title}'
 
 
 class Setting(models.Model):

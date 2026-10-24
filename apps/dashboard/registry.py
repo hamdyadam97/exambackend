@@ -2,7 +2,7 @@ from apps.users.models import User, UserProfile, OtpRequest, PasswordResetToken,
 from apps.content.models import (
     Category, QuestionsTopic, ExamSection, Blog, Testimonial,
     Notification, NotificationReceipt, AppInfo, ContactMessage,
-    SupportRequest, Instructor, AiInstruction, Setting,
+    SupportRequest, AiInstruction, Setting,
 )
 from apps.exams.models import (
     Question, Answer, QuestionTopic, ExamSectionLink, Exam,
@@ -142,12 +142,6 @@ DASHBOARD_MODELS = {
         ['user', 'question', 'status', 'created_at'],
         search_fields=['user__phone', 'question_text', 'message'],
         list_filter=['status'],
-        exclude=['created_at', 'updated_at'],
-    ),
-    'instructors': _base(
-        Instructor, 'Instructors',
-        ['name', 'specialization', 'rate'],
-        search_fields=['name', 'specialization'],
         exclude=['created_at', 'updated_at'],
     ),
     'ai_instructions': _base(

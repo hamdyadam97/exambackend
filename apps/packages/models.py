@@ -43,16 +43,7 @@ class Package(models.Model):
     is_new = models.BooleanField(default=False)
     is_featured = models.BooleanField(default=False)
     daily_rate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    instructor = models.ForeignKey(
-        'content.Instructor',
-        on_delete=models.SET_NULL,
-        db_column='instructor_id',
-        related_name='packages',
-        null=True,
-        blank=True,
-    )
     language = models.CharField(max_length=50, null=True, blank=True)
-    lessons_count = models.PositiveIntegerField(default=0)
     difficulty_level = models.PositiveSmallIntegerField(
         choices=list(DIFFICULTY_CHOICES.items()),
         null=True,

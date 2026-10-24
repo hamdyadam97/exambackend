@@ -11,7 +11,7 @@ from apps.packages.models import (
 
 class PackageAdmin(admin.ModelAdmin):
     list_display = [
-        'name', 'category', 'instructor', 'price', 'period_days',
+        'name', 'category', 'price', 'period_days',
         'subscription_count',
         'status', 'is_featured', 'is_bestseller', 'is_new', 'created_at',
     ]
@@ -20,8 +20,8 @@ class PackageAdmin(admin.ModelAdmin):
         'category', 'difficulty_level', 'language', 'created_at',
     ]
     search_fields = ['name', 'description', 'code']
-    autocomplete_fields = ['category', 'instructor']
-    list_select_related = ['category', 'instructor']
+    autocomplete_fields = ['category']
+    list_select_related = ['category']
     date_hierarchy = 'created_at'
     actions = ['activate', 'deactivate', 'mark_featured', 'unmark_featured']
     readonly_fields = ['created_at', 'updated_at', 'deleted_at']

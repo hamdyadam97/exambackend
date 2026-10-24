@@ -30,7 +30,7 @@ from apps.users.models import User, UserProfile
 from apps.content.models import (
     Category, QuestionsTopic, ExamSection, Blog, BlogComment, Testimonial,
     Notification, NotificationReceipt, AppInfo, Partner, ContactMessage,
-    SupportRequest, Instructor, Faq, AiInstruction, Setting,
+    SupportRequest, Faq, AiInstruction, Setting,
 )
 from apps.exams.models import (
     Question, Answer, QuestionTopic, ExamSectionLink,
@@ -95,7 +95,6 @@ def clear_existing_data():
     DiscountCode.objects.all().delete()
     Partner.objects.all().delete()
     Faq.objects.all().delete()
-    Instructor.objects.all().delete()
     ExamSection.objects.all().delete()
     QuestionsTopic.objects.all().delete()
     AppInfo.objects.all().delete()
@@ -178,7 +177,7 @@ def create_categories():
             'is_new': False,
         },
         'التمريض': {
-            'description': 'دورات وامتحانات للتمريض العام والمتخصص بما في ذلك العناية المركزة وتمريض الطوارئ.',
+            'description': 'امتحانات وبنك أسئلة للتمريض العام والمتخصص بما في ذلك العناية المركزة وتمريض الطوارئ.',
             'icon': 'heart-pulse',
             'is_top': True,
             'is_new': False,
@@ -325,10 +324,10 @@ def create_exams(main_cats, sub_cats, questions):
     return exams
 
 
-def create_packages(main_cats, exams, instructors):
+def create_packages(main_cats, exams):
     print('Creating packages...')
     packages = []
-    course_images = [
+    package_images = [
         'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80',
         'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80',
         'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=800&q=80',
@@ -336,7 +335,7 @@ def create_packages(main_cats, exams, instructors):
         'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=800&q=80',
         'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?auto=format&fit=crop&w=800&q=80',
     ]
-    course_names = [
+    package_names = [
         'باقة التمريض الشاملة',
         'باقة الطب البشري المتكاملة',
         'باقة الصيدلة الإكلينيكية',
@@ -345,24 +344,22 @@ def create_packages(main_cats, exams, instructors):
         'باقة التقنية والبرمجة',
     ]
     languages = ['العربية', 'English', 'العربية', 'English', 'العربية', 'English']
-    for i, name in enumerate(course_names):
+    for i, name in enumerate(package_names):
         cat = random.choice(main_cats)
         price = Decimal(random.choice(['15.00', '25.00', '35.00', '45.00']))
         discount = random.choice([0, 0, 10, 20])
         pkg = Package.objects.create(
             name=name,
-            code=f'CRS-{i+1:03d}',
-            description='دورة احترافية تشمل محاضرات مسجلة، أسئلة تدريبية، امتحانات تجريبية، ومتابعة مستمرة لضمان النجاح.',
-            logo=course_images[i % len(course_images)],
+            code=f'PKG-{i+1:03d}',
+            description='اشتراك يتيح لك بنك أسئلة شامل، امتحانات تجريبية بتوقيت حقيقي، وتقارير أداء مفصلة لضمان النجاح.',
+            logo=package_images[i % len(package_images)],
             price=price,
             status=Package.ACTIVE,
             period_days=random.choice([30, 60, 90]),
             duration_minutes=random.choice([120, 240, 360, 480]),
             number_of_questions=random.choice([100, 200, 500]),
             category=cat,
-            instructor=random.choice(instructors) if instructors else None,
             language=languages[i % len(languages)],
-            lessons_count=random.randint(10, 40),
             is_trial=False,
             is_bestseller=(i == 0),
             is_new=(i == 1),
@@ -387,9 +384,7 @@ def create_packages(main_cats, exams, instructors):
         duration_minutes=60,
         number_of_questions=50,
         category=trial_cat,
-        instructor=random.choice(instructors) if instructors else None,
         language='العربية',
-        lessons_count=5,
         is_trial=True,
         is_new=True,
         difficulty_level=Package.BEGINNER,
@@ -409,9 +404,7 @@ def create_packages(main_cats, exams, instructors):
         daily_rate=Decimal('1.00'),
         number_of_questions=1000,
         category=random.choice(main_cats),
-        instructor=random.choice(instructors) if instructors else None,
         language='العربية',
-        lessons_count=20,
         is_custom=True,
     )
     packages.append(custom)
@@ -689,123 +682,13 @@ def create_support_requests(users, questions):
         )
 
 
-def create_instructors(main_cats):
-    print('Creating instructors...')
-    created = []
-    instructors_data = [
-        {
-            'name': 'د. أحمد الخالدي',
-            'title': 'استشاري الطب الباطني',
-            'specialization': 'طب بشري',
-            'bio': 'أكثر من 15 عاماً من الخبرة في تدريس الاختبارات الطبية وإعداد الأطباء للبورد.',
-            'years': 15,
-            'students': 12400,
-            'courses': 8,
-            'certificates': 3200,
-            'rate': Decimal('4.9'),
-            'featured': True,
-        },
-        {
-            'name': 'د. سارة العمري',
-            'title': 'مهندسة مدنية ومدربة معتمدة',
-            'specialization': 'هندسة مدنية',
-            'bio': 'تخصص في تبسيط مفاهيم الهندسة للاختبارات المهنية مع آلاف الطلاب الناجحين.',
-            'years': 10,
-            'students': 8700,
-            'courses': 6,
-            'certificates': 2100,
-            'rate': Decimal('4.8'),
-            'featured': True,
-        },
-        {
-            'name': 'د. محمد السعدي',
-            'title': 'صيدلي إكلينيكي',
-            'specialization': 'صيدلة',
-            'bio': 'خبير في التدريب الصيدلي الإكلينيكي وإعداد المتخصصين لاختبارات الترخيص.',
-            'years': 12,
-            'students': 9300,
-            'courses': 5,
-            'certificates': 1800,
-            'rate': Decimal('4.7'),
-            'featured': True,
-        },
-        {
-            'name': 'د. لينا ناصر',
-            'title': 'أخصائية التمريض السريري',
-            'specialization': 'تمريض',
-            'bio': 'مدربة شغوفة بتمكين الممرضين من اجتياز الاختبارات التخصصية بثقة.',
-            'years': 8,
-            'students': 5600,
-            'courses': 4,
-            'certificates': 1200,
-            'rate': Decimal('4.6'),
-            'featured': False,
-        },
-        {
-            'name': 'م. عمر حداد',
-            'title': 'مهندس برمجيات',
-            'specialization': 'تقنية المعلومات',
-            'bio': 'مدرب معتمد في برمجة وتطوير الأنظمة الرقمية للمهنيين والطلبة.',
-            'years': 9,
-            'students': 6100,
-            'courses': 7,
-            'certificates': 1500,
-            'rate': Decimal('4.5'),
-            'featured': False,
-        },
-        {
-            'name': 'د. رنا الشيخ',
-            'title': 'اختصاصية أمراض الجلدية والتجميل',
-            'specialization': 'الجمال والجلدية',
-            'bio': 'تقدم محتوى تدريبي احترافي في مجال الجلدية والتجميل للاختبارات المهنية.',
-            'years': 11,
-            'students': 7200,
-            'courses': 5,
-            'certificates': 1900,
-            'rate': Decimal('4.8'),
-            'featured': False,
-        },
-    ]
-    images = [
-        'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=400&q=80',
-        'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
-        'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80',
-        'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=400&q=80',
-        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-        'https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&w=400&q=80',
-    ]
-    social_domains = ['facebook.com', 'twitter.com', 'linkedin.com']
-    for i, item in enumerate(instructors_data):
-        instructor = Instructor.objects.create(
-            name=item['name'],
-            title=item['title'],
-            image=images[i % len(images)],
-            specialization=item['specialization'],
-            category=random.choice(main_cats),
-            bio=item['bio'],
-            years_of_experience=item['years'],
-            students_count=item['students'],
-            courses_count=item['courses'],
-            certificates_count=item['certificates'],
-            rate=item['rate'],
-            facebook=f'https://{random.choice(social_domains)}/instructor-{i+1}',
-            twitter=f'https://{random.choice(social_domains)}/instructor-{i+1}',
-            linkedin=f'https://{random.choice(social_domains)}/instructor-{i+1}',
-            is_featured=item['featured'],
-            order=i + 1,
-            status=Instructor.ACTIVE,
-        )
-        created.append(instructor)
-    return created
-
-
 def create_faqs():
     print('Creating FAQs...')
     faqs = [
-        ('كيف يتم اختيار المدربين في المنصة؟', 'نختار المدربين بناءً على خبرتهم العملية والأكاديمية، مع التأكد من سجلهم في إعداد المتعلمين للنجاح.', 'instructors'),
-        ('هل يمكنني التواصل مباشرة مع المدرب؟', 'نعم، يمكنك طرح الأسئلة ضمن كل درس أو عبر قسم الدعم الفني.', 'instructors'),
-        ('هل الدورات معتمدة؟', 'جميع دوراتنا مصممة وفق معايير مهنية وتقدم شهادات إتمام معتمدة.', 'certificates'),
-        ('كيف أصبح مدرباً في المنصة؟', 'يمكنك التقدم عبر نموذج الانضمام وسيقوم فريقنا بمراجعة طلبك.', 'instructors'),
+        ('كيف أبدأ امتحاناً جديداً؟', 'اشترك في الباقة المناسبة، ثم من لوحة التحكم اختر "إنشاء امتحان" وحدد الأقسام وعدد الأسئلة والمدة.', 'exams'),
+        ('هل يمكنني إعادة الامتحان؟', 'نعم، يمكنك إنشاء امتحانات جديدة بلا حدود طوال مدة اشتراكك.', 'exams'),
+        ('هل تظهر النتيجة فوراً؟', 'نعم، تظهر النتيجة مباشرة بعد إنهاء الامتحان مع شرح الإجابات وتحليل الأداء.', 'exams'),
+        ('ماذا يحدث عند انتهاء الاشتراك؟', 'تبقى نتائجك السابقة محفوظة، ويمكنك التجديد في أي وقت لمتابعة الامتحانات.', 'general'),
         ('هل هناك ضمان لاسترجاع المبلغ؟', 'نقدم فترة تجريبية مجانية لمعظم الباقات، وسياسة استرجاع واضحة خلال 7 أيام.', 'general'),
     ]
     for i, (q, a, cat) in enumerate(faqs):
@@ -917,10 +800,9 @@ def seed(clear=False):
         create_testimonials(users)
         create_blogs(main_cats)
         create_support_requests(users, questions)
-        instructors = create_instructors(main_cats)
         create_faqs()
         create_ai_instructions(questions)
-        packages = create_packages(main_cats, exams, instructors)
+        packages = create_packages(main_cats, exams)
         create_discount_codes()
         create_subscriptions_payments_invoices(users, packages, payment_types)
         create_app_info()

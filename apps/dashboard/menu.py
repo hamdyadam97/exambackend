@@ -2,7 +2,7 @@ from apps.users.models import User, UserProfile, OtpRequest, PasswordResetToken,
 from apps.content.models import (
     Category, QuestionsTopic, ExamSection, Blog, Testimonial,
     Notification, NotificationReceipt, AppInfo, ContactMessage,
-    SupportRequest, Instructor, AiInstruction, Setting,
+    SupportRequest, AiInstruction, Setting,
 )
 from apps.exams.models import (
     Question, Answer, QuestionTopic, ExamSectionLink, Exam,
@@ -30,7 +30,6 @@ SECTION_ICONS = {
     'sections': 'fa-layer-group',
     'blogs': 'fa-blog',
     'testimonials': 'fa-star',
-    'instructors': 'fa-chalkboard-user',
     'ai_instructions': 'fa-robot',
     'app_info': 'fa-mobile-screen',
     'contact_messages': 'fa-envelope',
@@ -81,7 +80,7 @@ MENU_GROUPS = {
         'label': 'Content',
         'label_ar': 'المحتوى',
         'icon': 'fa-newspaper',
-        'sections': ['categories', 'topics', 'sections', 'blogs', 'testimonials', 'instructors', 'ai_instructions', 'app_info', 'contact_messages'],
+        'sections': ['categories', 'topics', 'sections', 'blogs', 'testimonials', 'ai_instructions', 'app_info', 'contact_messages'],
     },
     'exams': {
         'label': 'Exams',

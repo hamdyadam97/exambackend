@@ -23,7 +23,7 @@ This document clarifies the ownership of each Django app in `backend/apps/`. Kee
 
 - Self-referential `Category` tree (replaces legacy `Category`/`SubCategory`/`SubSubCategory`).
 - Topics (`QuestionsTopic`), exam sections (`ExamSection`).
-- Blogs, testimonials, instructors, notifications, app info, settings, contact/support messages, AI instructions.
+- Blogs, testimonials, notifications, app info, settings, contact/support messages, AI instructions.
 - Exposes serializers used by `exams` and `packages`.
 
 ## `exams`
@@ -36,7 +36,7 @@ This document clarifies the ownership of each Django app in `backend/apps/`. Kee
 - No category definitions; consumes `content.Category`.
 
 ## `packages`
-**Subscriptions, packages, and discount codes.**
+**Exam subscriptions, packages, and discount codes.** Packages sell access to exams; there are no courses.
 
 - `Package` (pricing, duration, question limits).
 - `PackageSubCategory` / `PackageExam` linking packages to content and exams.

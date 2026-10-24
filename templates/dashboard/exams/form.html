@@ -91,10 +91,6 @@
           {{ form.sub_sub_category }}
         </div>
         <div>
-          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Instructor" %}</label>
-          {{ form.instructor }}
-        </div>
-        <div>
           <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{% trans "Exam Type" %}</label>
           {{ form.exam_type }}
         </div>
@@ -130,10 +126,6 @@
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <label class="flex items-center gap-3 admin-card rounded-xl p-4 cursor-pointer">
-          {{ form.certificate_available }}
-          <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{% trans "Certificate Available" %}</span>
-        </label>
         <label class="flex items-center gap-3 admin-card rounded-xl p-4 cursor-pointer">
           {{ form.has_instant_result }}
           <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{% trans "Instant Result" %}</span>
