@@ -9,3 +9,9 @@ DATABASES = {
         'NAME': BASE_DIR / 'db_test.sqlite3',  # noqa: F405
     }
 }
+
+# The manifest storage needs `collectstatic` to have run; tests render templates without it.
+STORAGES = {
+    **STORAGES,  # noqa: F405
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}

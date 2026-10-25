@@ -11,7 +11,7 @@ class QuestionForm(BaseDashboardForm):
         model = Question
         fields = [
             'text_question', 'category', 'sub_category', 'sub_subcategory',
-            'answer_type', 'status', 'notes', 'hint',
+            'answer_type', 'difficulty', 'status', 'notes', 'hint',
             'show_answer_explanation', 'show_hint', 'show_answer', 'show_video',
             'video_link', 'time_minutes',
         ]

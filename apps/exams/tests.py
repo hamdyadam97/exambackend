@@ -228,6 +228,132 @@ class AnswerIntegrityTests(TestCase):
         self.assertEqual(self.answer(self.exam_trail, self.foreign_answer).status_code, 422)
 
 
+class QuestionCollectionTests(AnswerIntegrityTests):
+    """Reuses the integrity fixture: one question in an exam-mode trail and one in a tutor-mode trail."""
+
+    def test_save_and_unsave(self):
+        url = f'/api/questions/{self.question.id}/save'
+        self.assertEqual(self.client.post(url).status_code, 200)
+        saved = self.client.get('/api/questions/collection/saved').json()['data']['questions']
+        self.assertEqual([q['id'] for q in saved], [self.question.id])
+        self.assertEqual(saved[0]['text'], 'Q')
+
+        data = self.client.get(f'/api/exams/get-questions?exam_id={self.exam_trail.id}').json()['data']
+        self.assertEqual(data['saved_question_ids'], [self.question.id])
+
+        self.client.delete(url)
+        self.assertEqual(self.client.get('/api/questions/collection/saved').json()['data']['questions'], [])
+
+    def test_cannot_save_question_outside_own_exams(self):
+        self.assertEqual(self.client.post(f'/api/questions/{self.foreign_answer.question_id}/save').status_code, 404)
+
+    def test_wrong_list_ignores_exams_in_progress(self):
+        self.answer(self.exam_trail, self.wrong)
+        self.assertEqual(self.client.get('/api/questions/collection/wrong').json()['data']['questions'], [])
+        self.client.post(f'/api/exams/{self.exam_trail.id}/finish')
+        wrong = self.client.get('/api/questions/collection/wrong').json()['data']['questions']
+        self.assertEqual(wrong[0]['times_wrong'], 1)
+
+    def test_flag_and_review_persist(self):
+        res = self.client.post(
+            f'/api/exams/{self.exam_trail.id}/question-state',
+            {'question_id': self.question.id, 'is_marked': True, 'is_review': True}, format='json',
+        )
+        self.assertEqual(res.json()['data'], {'question_id': self.question.id, 'is_marked': True, 'is_review': True})
+        detail = self.client.get(f'/api/exams/get-questions?exam_id={self.exam_trail.id}').json()['data']['details'][0]
+        self.assertTrue(detail['is_marked'])
+        self.assertTrue(detail['is_review'])
+        flagged = self.client.get('/api/questions/collection/flagged').json()['data']['questions']
+        self.assertEqual([q['id'] for q in flagged], [self.question.id])
+
+    def test_build_exam_from_saved_questions(self):
+        self.client.post(f'/api/questions/{self.question.id}/save')
+        res = self.client.post('/api/exams/store', {
+            'exam_mode': 'tatur', 'question_mode': 'saved', 'question_count': 10,
+            'categories': [self.question.category_id],
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        trail = ExamTrail.objects.get(pk=res.json()['data']['exam_id'])
+        self.assertEqual(list(trail.details.values_list('question_id', flat=True)), [self.question.id])
+
+
+class DifficultyFilterTests(TestCase):
+    def setUp(self):
+        from apps.content.models import ExamSection
+        from apps.exams.models import ExamSectionLink
+
+        self.user = User.objects.create_user(phone='962791234567', password='pass')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.category = Category.objects.create(name='Pediatrics')
+        self.section = ExamSection.objects.create(name='Neonates', category=self.category)
+        self.by_level = {}
+        for level, count in ((Question.DIFFICULTY_EASY, 2), (Question.DIFFICULTY_HARD, 3), (None, 1)):
+            for i in range(count):
+                q = Question.objects.create(text_question=f'{level}-{i}', category=self.category, status=1, difficulty=level)
+                ExamSectionLink.objects.create(question=q, section=self.section)
+                self.by_level.setdefault(level, []).append(q.id)
+
+    def section_total(self, difficulty=''):
+        url = f'/api/exams/sections?category_ids[]={self.category.id}'
+        if difficulty:
+            url += f'&difficulty={difficulty}'
+        return self.client.get(url).json()['data']
+
+    def test_counts_follow_difficulty(self):
+        self.assertEqual(self.section_total()['total_questions'], 6)
+        self.assertEqual(self.section_total('mixed')['total_questions'], 6)
+        self.assertEqual(self.section_total('hard')['total_questions'], 3)
+        data = self.section_total('easy')
+        self.assertEqual(data['total_questions'], 2)
+        self.assertEqual(data['sections'][0]['questions_count'], 2)
+
+    def test_exam_draws_only_chosen_difficulty(self):
+        res = self.client.post('/api/exams/store', {
+            'exam_mode': 'exam', 'difficulty': 'hard', 'question_count': 10,
+            'categories': [self.category.id], 'sections': [self.section.id],
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        trail = ExamTrail.objects.get(pk=res.json()['data']['exam_id'])
+        self.assertEqual(trail.difficulty, Question.DIFFICULTY_HARD)
+        self.assertEqual(sorted(trail.details.values_list('question_id', flat=True)), sorted(self.by_level[Question.DIFFICULTY_HARD]))
+
+    def create(self, **options):
+        res = self.client.post('/api/exams/store', {
+            'exam_mode': 'exam', 'question_count': 10, 'categories': [self.category.id], **options,
+        }, format='json')
+        return ExamTrail.objects.get(pk=res.json()['data']['exam_id'])
+
+    def test_questions_in_fixed_order_when_not_randomized(self):
+        trail = self.create(randomize_questions=False)
+        ids = list(trail.details.order_by('id').values_list('question_id', flat=True))
+        self.assertEqual(ids, sorted(ids))
+
+    def test_answer_order_is_shuffled_per_exam_and_stable(self):
+        question = Question.objects.get(pk=self.by_level[None][0])
+        answers = [Answer.objects.create(question=question, answer_option=str(i)).id for i in range(6)]
+        url = f'/api/exams/{question.id}/get-question?exam_id='
+
+        plain = self.create()
+        shown = [a['id'] for a in self.client.get(url + str(plain.id)).json()['data']['question']['answers']]
+        self.assertEqual(shown, answers)
+
+        shuffled = self.create(randomize_answers=True)
+        first = [a['id'] for a in self.client.get(url + str(shuffled.id)).json()['data']['question']['answers']]
+        again = [a['id'] for a in self.client.get(url + str(shuffled.id)).json()['data']['question']['answers']]
+        self.assertEqual(sorted(first), answers)
+        self.assertEqual(first, again)
+        self.assertEqual(first, shuffled.answer_order(question.id, answers))
+
+    def test_no_questions_at_difficulty(self):
+        Question.objects.filter(difficulty=Question.DIFFICULTY_EASY).update(difficulty=Question.DIFFICULTY_HARD)
+        res = self.client.post('/api/exams/store', {
+            'exam_mode': 'exam', 'difficulty': 'easy', 'question_count': 5, 'categories': [self.category.id],
+        }, format='json')
+        self.assertEqual(res.status_code, 500)
+        self.assertFalse(res.json()['status'])
+
+
 class ExamTimeLimitTests(ExamStartApiTests):
     """Reuses the start-exam fixture: a 30-minute exam with 3 questions and attempts_allowed=1."""
 

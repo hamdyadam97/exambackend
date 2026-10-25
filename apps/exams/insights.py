@@ -8,7 +8,7 @@ from django.db.models.functions import TruncDate
 from django.utils import timezone
 
 from apps.content.models import QuestionsTopic
-from apps.exams.models import Exam, ExamTrail, ExamTrialDetail, UserExam
+from apps.exams.models import Exam, ExamTrialDetail, UserExam
 
 PASS_SCORE = 50  # Same threshold the admin dashboard uses for its pass rate.
 STRONG_ACCURACY = 75
@@ -36,10 +36,7 @@ def student_insights(user):
 
     today = timezone.localdate()
     # Only answers whose grading is already visible, so stats cannot leak results of an exam in progress.
-    answered = ExamTrialDetail.objects.filter(
-        Q(exam_trail__status='completed') | Q(exam_trail__mode=ExamTrail.MODE_TUTOR),
-        exam_trail__user=user, answer__isnull=False,
-    )
+    answered = ExamTrialDetail.graded_for(user)
 
     completed = list(
         user.exam_trails.filter(status='completed', total_questions__gt=0).order_by('-updated_at')[:10]

@@ -21,6 +21,7 @@ from apps.exams.views import (
     ExamAdvanceStageView, ExamStageView, ExamStoreQuestionAnswerView,
     ExamStoreSingleQuestionAnswerView, ExamOverviewView, ExamFinishView,
     ExamsPageView, ExamDetailPageView, ExamStartView, StudentInsightsView,
+    ExamQuestionStateView, SavedQuestionView, QuestionCollectionView,
 )
 from apps.packages.views import (
     PackageDataView, PackageListView, PackageDetailView, RelatedPackagesView,
@@ -100,6 +101,9 @@ urlpatterns = [
     path('exams/<int:exam_id>/store-single-question-answer', ExamStoreSingleQuestionAnswerView.as_view(), name='exam-store-single-answer'),
     path('exams/<int:exam_id>/overview', ExamOverviewView.as_view(), name='exam-overview'),
     path('exams/<int:exam_id>/finish', ExamFinishView.as_view(), name='exam-finish'),
+    path('exams/<int:exam_id>/question-state', ExamQuestionStateView.as_view(), name='exam-question-state'),
+    path('questions/<int:question_id>/save', SavedQuestionView.as_view(), name='question-save'),
+    path('questions/collection/<str:kind>', QuestionCollectionView.as_view(), name='question-collection'),
 
     # Packages
     path('packages/data', PackageDataView.as_view(), name='package-data'),

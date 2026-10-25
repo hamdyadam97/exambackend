@@ -4,10 +4,12 @@ Exam API views.
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Max, Q
 from django.utils import timezone
+from django.utils.html import strip_tags
+from django.utils.text import Truncator
 from apps.exams.models import (
-    Question, Answer, Exam, ExamTrail, ExamTrialDetail, UserExam, exam_classification_q,
+    Question, Answer, Exam, ExamTrail, ExamTrialDetail, SavedQuestion, UserExam, exam_classification_q,
 )
 from apps.exams.serializers import (
     QuestionResource, ExamResource, ExamDetailResource, ExamTrialResource, ExamTrialIndexResource,
@@ -25,6 +27,11 @@ from apps.exams.insights import student_insights
 
 class BaseApiView(APIView):
     pass
+
+
+def difficulty_param(request):
+    """The builder's ?difficulty=easy|medium|hard as a Question difficulty, or None for mixed."""
+    return Question.DIFFICULTY_BY_NAME.get(request.query_params.get('difficulty', ''))
 
 
 def reject_if_closed(trail):
@@ -164,6 +171,93 @@ class StudentInsightsView(BaseApiView):
         return api_response(True, 'Fetched Successfully', student_insights(request.user))
 
 
+class ExamQuestionStateView(BaseApiView):
+    """Flag a question or mark it for later review inside an exam, without touching its answer."""
+    permission_classes = [IsAuthenticated]
+
+    @api_post('ExamQuestionState')
+    def post(self, request, exam_id):
+        detail = ExamTrialDetail.objects.filter(
+            exam_trail_id=exam_id, exam_trail__user=request.user,
+            question_id=request.data.get('question_id') or 0,
+        ).first()
+        if not detail:
+            return send_error('Question not found', {'QuestionNotFound': ['This question is not part of this exam']})
+        fields = [f for f in ('is_marked', 'is_review') if f in request.data]
+        for field in fields:
+            setattr(detail, field, request.data[field] in (True, 'true', 1, '1'))
+        if fields:
+            detail.save(update_fields=fields + ['updated_at'])
+        return api_response(True, 'Saved', {
+            'question_id': detail.question_id, 'is_marked': bool(detail.is_marked), 'is_review': detail.is_review,
+        })
+
+
+class SavedQuestionView(BaseApiView):
+    """Bookmark (POST) or un-bookmark (DELETE) a question the student has met in one of their exams."""
+    permission_classes = [IsAuthenticated]
+
+    @api_post('SaveQuestion')
+    def post(self, request, question_id):
+        if not ExamTrialDetail.objects.filter(exam_trail__user=request.user, question_id=question_id).exists():
+            return send_error('Question not found', {'QuestionNotFound': ['You can only save questions from your exams']})
+        SavedQuestion.objects.get_or_create(user=request.user, question_id=question_id)
+        return api_response(True, 'Saved', {'question_id': question_id, 'saved': True})
+
+    def delete(self, request, question_id):
+        SavedQuestion.objects.filter(user=request.user, question_id=question_id).delete()
+        return api_response(True, 'Removed', {'question_id': question_id, 'saved': False})
+
+
+class QuestionCollectionView(BaseApiView):
+    """The student's saved, wrong or flagged questions, newest first."""
+    permission_classes = [IsAuthenticated]
+    LIMIT = 200
+
+    @api_get('QuestionCollection')
+    def get(self, request, kind):
+        user = request.user
+        if kind == 'saved':
+            rows = SavedQuestion.objects.filter(user=user).values('question_id', 'created_at')
+            dates = {r['question_id']: r['created_at'] for r in rows}
+            counts = {}
+        elif kind == 'wrong':
+            rows = (
+                ExamTrialDetail.graded_for(user).filter(is_correct=False)
+                .values('question_id').annotate(times=Count('id'), last=Max('updated_at'))
+            )
+            dates = {r['question_id']: r['last'] for r in rows}
+            counts = {r['question_id']: r['times'] for r in rows}
+        elif kind == 'flagged':
+            rows = (
+                ExamTrialDetail.objects.filter(exam_trail__user=user, is_marked=True)
+                .values('question_id').annotate(last=Max('updated_at'))
+            )
+            dates = {r['question_id']: r['last'] for r in rows}
+            counts = {}
+        else:
+            return send_error('Not found', {'kind': ['Use saved, wrong or flagged']})
+
+        ids = sorted(dates, key=lambda qid: dates[qid], reverse=True)[:self.LIMIT]
+        saved_ids = set(SavedQuestion.objects.filter(user=user, question_id__in=ids).values_list('question_id', flat=True))
+        questions = Question.objects.in_bulk(ids)
+        items = []
+        for qid in ids:
+            question = questions.get(qid)
+            if not question:
+                continue
+            items.append({
+                'id': qid,
+                'text': Truncator(strip_tags(question.text_question or '')).chars(220),
+                'category': question.category.name if question.category_id else None,
+                'category_id': question.category_id,
+                'date': dates[qid],
+                'times_wrong': counts.get(qid),
+                'saved': qid in saved_ids,
+            })
+        return api_response(True, 'Fetched Successfully', {'questions': items, 'total': len(dates)})
+
+
 class ExamListView(BaseApiView):
     permission_classes = [IsAuthenticated]
 
@@ -172,6 +266,11 @@ class ExamListView(BaseApiView):
         exams = ExamTrail.objects.filter(user=request.user).prefetch_related('categories').annotate(
             details_count=Count('details', filter=Q(details__answer_id__isnull=False))
         ).order_by('-created_at')
+        status = request.query_params.get('status')
+        if status == 'completed':
+            exams = exams.filter(status='completed')
+        elif status == 'in_progress':
+            exams = exams.exclude(status='completed')
         from apps.core.pagination import StandardResultsSetPagination
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(exams, request)
@@ -328,11 +427,13 @@ class ExamSectionsView(BaseApiView):
         # The section count is cumulative: every classification level selected
         # above the section must match, plus a link to this section — the same
         # chain ExamTrail.get_question_query builds when drawing questions.
+        difficulty = difficulty_param(request)
         question_chain = exam_classification_q(
             'exam_section_links__question',
             category_ids=category_ids,
             sub_category_ids=sub_category_ids,
             sub_sub_category_ids=sub_sub_category_ids,
+            difficulty=difficulty,
         )
 
         sections = sections.filter(question_chain).annotate(
@@ -347,8 +448,9 @@ class ExamSectionsView(BaseApiView):
             sub_category_ids=sub_category_ids,
             sub_sub_category_ids=sub_sub_category_ids,
             section_ids=section_ids,
+            difficulty=difficulty,
         )
-        total = Question.objects.filter(total_filter).count() if section_ids else 0
+        total = Question.objects.filter(total_filter).distinct().count() if section_ids else 0
 
         return api_response(True, 'Fetched Successfully', {
             'sections': SectionResource(sections, many=True, context={'request': request}).data,
@@ -389,6 +491,7 @@ class ExamTopicsView(BaseApiView):
             sub_category_ids=sub_category_ids,
             sub_sub_category_ids=sub_sub_category_ids,
             section_ids=section_ids,
+            difficulty=difficulty_param(request),
         )
 
         topics = QuestionsTopic.objects.filter(question_chain).annotate(
@@ -520,6 +623,8 @@ class ExamStoreView(BaseApiView):
                     question_mode=data['question_mode'],
                     is_timed_mode=data['is_timed_mode'],
                     duration_minutes=(data['duration_minutes'] or None) if data['is_timed_mode'] else None,
+                    difficulty=Question.DIFFICULTY_BY_NAME.get(data['difficulty']),
+                    shuffle_answers=data['randomize_answers'],
                     question_count=data['question_count'],
                 )
                 exam.categories.set(data['categories'])
@@ -527,7 +632,7 @@ class ExamStoreView(BaseApiView):
                 exam.sub_sub_categories.set(data['sub_sub_categories'])
                 exam.sections.set(data['sections'])
                 exam.topics.set(data['topics'])
-                exam.save_details()
+                exam.save_details(randomize=data['randomize_questions'])
                 return api_response(True, 'Created Successfully', {'exam_id': exam.id})
         except ValueError as e:
             return api_response(False, str(e), {}, 500)
@@ -584,6 +689,9 @@ class ExamQuestionsView(BaseApiView):
             'stage_offset': stage_offset,
             'stage_question_count': stage_count,
             'is_last_stage': is_last,
+            'saved_question_ids': list(SavedQuestion.objects.filter(
+                user=request.user, question_id__in=stage_question_ids,
+            ).values_list('question_id', flat=True)),
         }
         return api_response(True, 'Exam data', data)
 
@@ -605,11 +713,12 @@ class ExamQuestionDetailView(BaseApiView):
             question = Question.objects.get(pk=question_id)
         except Question.DoesNotExist:
             return send_error('Question not found', {'QuestionNotFound': ['No question found']})
-        return api_response(True, 'Exam data', {
-            'question': QuestionResource(
-                question, context={'request': request, 'reveal': trail.reveals_question(question_id)},
-            ).data,
-        })
+        data = QuestionResource(
+            question, context={'request': request, 'reveal': trail.reveals_question(question_id)},
+        ).data
+        by_id = {answer['id']: answer for answer in data['answers']}
+        data['answers'] = [by_id[aid] for aid in trail.answer_order(question_id, by_id)]
+        return api_response(True, 'Exam data', {'question': data})
 
 
 class ExamCurrentStageView(BaseApiView):

@@ -422,3 +422,33 @@ msgstr "معدل النجاح"
 
 msgid "Open Support"
 msgstr "الدعم المفتوح"
+
+msgid "Easy"
+msgstr "سهل"
+
+msgid "Medium"
+msgstr "متوسط"
+
+msgid "Hard"
+msgstr "صعب"
+
+msgid "Set difficulty: Easy"
+msgstr "تعيين الصعوبة: سهل"
+
+msgid "Set difficulty: Medium"
+msgstr "تعيين الصعوبة: متوسط"
+
+msgid "Set difficulty: Hard"
+msgstr "تعيين الصعوبة: صعب"
+
+msgid "Saved"
+msgstr "المحفوظة"
+
+msgid "Saved questions"
+msgstr "الأسئلة المحفوظة"
+
+msgid "Saved Question"
+msgstr "سؤال محفوظ"
+
+msgid "Saved Questions"
+msgstr "الأسئلة المحفوظة"

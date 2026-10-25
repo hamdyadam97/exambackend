@@ -155,7 +155,7 @@ class ExamTrialDetailResource(serializers.ModelSerializer):
 
     class Meta:
         model = ExamTrialDetail
-        fields = ['id', 'question_id', 'answer_id', 'is_correct', 'is_marked']
+        fields = ['id', 'question_id', 'answer_id', 'is_correct', 'is_marked', 'is_review']
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -233,10 +233,13 @@ class ExamStoreSerializer(serializers.Serializer):
     exam_mode = serializers.ChoiceField(choices=[('tatur', 'Tutor Mode'), ('exam', 'Exam Mode')], default='tatur')
     question_mode = serializers.ChoiceField(choices=[
         ('all', 'All'), ('unused', 'Unused'), ('used', 'Used'),
-        ('correct', 'Correct'), ('incorrect', 'InCorrect'), ('marked', 'Marked'),
+        ('correct', 'Correct'), ('incorrect', 'InCorrect'), ('marked', 'Marked'), ('saved', 'Saved'),
     ], default='all')
     is_timed_mode = serializers.BooleanField(default=False)
     duration_minutes = serializers.IntegerField(required=False, default=0, min_value=0, max_value=600)
+    difficulty = serializers.ChoiceField(choices=['easy', 'medium', 'hard', 'mixed'], default='mixed')
+    randomize_questions = serializers.BooleanField(default=True)
+    randomize_answers = serializers.BooleanField(default=False)
     question_count = serializers.IntegerField(required=False, default=0)
     categories = serializers.ListField(child=serializers.IntegerField(), required=False, default=list)
     sub_categories = serializers.ListField(child=serializers.IntegerField(), required=False, default=list)

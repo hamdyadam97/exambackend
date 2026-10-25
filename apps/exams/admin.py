@@ -4,7 +4,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.admin_site import admin_site
 from apps.exams.models import (
     Question, Answer, QuestionTopic, ExamSectionLink, Exam, ExamQuestion,
-    UserExam, UserExamAnswer, UserExamTrial, ExamTrail, ExamTrialDetail,
+    UserExam, UserExamAnswer, UserExamTrial, ExamTrail, ExamTrialDetail, SavedQuestion,
     ExamTrailCategoryLink, ExamTrailSubCategoryLink, ExamTrailSubSubCategoryLink,
     ExamTrailSectionLink, ExamTrailTopicLink,
 )
@@ -31,10 +31,10 @@ class ExamSectionLinkInline(admin.TabularInline):
 class QuestionAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'text_question_short', 'category', 'sub_category',
-        'sub_subcategory', 'answer_type', 'answer_count',
+        'sub_subcategory', 'answer_type', 'difficulty', 'answer_count',
         'topics_list', 'sections_list', 'status', 'created_at',
     ]
-    list_filter = ['status', 'answer_type', 'category', 'created_at']
+    list_filter = ['status', 'answer_type', 'difficulty', 'category', 'created_at']
     search_fields = ['text_question', 'notes']
     inlines = [AnswerInline, QuestionTopicInline, ExamSectionLinkInline]
     autocomplete_fields = [
@@ -42,12 +42,27 @@ class QuestionAdmin(admin.ModelAdmin):
     ]
     list_select_related = ['category', 'sub_category', 'sub_subcategory']
     date_hierarchy = 'created_at'
-    actions = ['activate', 'deactivate', 'duplicate_questions']
+    actions = [
+        'activate', 'deactivate', 'duplicate_questions',
+        'set_difficulty_easy', 'set_difficulty_medium', 'set_difficulty_hard',
+    ]
     readonly_fields = ['created_at', 'updated_at', 'deleted_at']
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.annotate(answer_count=Count('answers'))
+
+    @admin.action(description=_('Set difficulty: Easy'))
+    def set_difficulty_easy(self, request, queryset):
+        queryset.update(difficulty=Question.DIFFICULTY_EASY)
+
+    @admin.action(description=_('Set difficulty: Medium'))
+    def set_difficulty_medium(self, request, queryset):
+        queryset.update(difficulty=Question.DIFFICULTY_MEDIUM)
+
+    @admin.action(description=_('Set difficulty: Hard'))
+    def set_difficulty_hard(self, request, queryset):
+        queryset.update(difficulty=Question.DIFFICULTY_HARD)
 
     @admin.display(description=_('Question'))
     def text_question_short(self, obj):
@@ -312,6 +327,15 @@ class ExamTrialDetailAdmin(admin.ModelAdmin):
 
 
 admin_site.register(ExamTrialDetail, ExamTrialDetailAdmin)
+class SavedQuestionAdmin(admin.ModelAdmin):
+    list_display = ['user', 'question', 'created_at']
+    search_fields = ['user__phone', 'question__text_question']
+    autocomplete_fields = ['user', 'question']
+    list_select_related = ['user', 'question']
+    readonly_fields = ['created_at']
+
+
+admin_site.register(SavedQuestion, SavedQuestionAdmin)
 class ExamTrailCategoryLinkAdmin(admin.ModelAdmin):
     list_display = ['exam_trail', 'category']
     search_fields = ['exam_trail__title', 'category__name']

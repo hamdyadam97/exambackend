@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 
 
 def exam_classification_q(prefix='', category_ids=None, sub_category_ids=None,
-                          sub_sub_category_ids=None, section_ids=None, topic_ids=None):
+                          sub_sub_category_ids=None, section_ids=None, topic_ids=None, difficulty=None):
     """Cumulative (AND) filter for the exam question pool, shared by the
     creation wizard counts and the actual exam build so both always agree.
 
@@ -34,6 +34,8 @@ def exam_classification_q(prefix='', category_ids=None, sub_category_ids=None,
         chain &= Q(**{f'{p}exam_section_links__section_id__in': section_ids})
     if topic_ids:
         chain &= Q(**{f'{p}question_topics__topic_id__in': topic_ids})
+    if difficulty:
+        chain &= Q(**{f'{p}difficulty': difficulty})
     return chain
 
 
@@ -58,11 +60,25 @@ class Question(models.Model):
         ANSWER_TYPE_MULTIPLE: _('Multiple Choice'),
     }
 
+    DIFFICULTY_EASY = 1
+    DIFFICULTY_MEDIUM = 2
+    DIFFICULTY_HARD = 3
+    DIFFICULTY_CHOICES = {
+        DIFFICULTY_EASY: _('Easy'),
+        DIFFICULTY_MEDIUM: _('Medium'),
+        DIFFICULTY_HARD: _('Hard'),
+    }
+    # The values the exam builder sends; 'mixed' (or nothing) means no difficulty filter.
+    DIFFICULTY_BY_NAME = {'easy': DIFFICULTY_EASY, 'medium': DIFFICULTY_MEDIUM, 'hard': DIFFICULTY_HARD}
+
     text_question = models.TextField(null=True, blank=True)
     notes = models.TextField(null=True, blank=True)
     status = models.IntegerField(choices=list(STATUS_CHOICES.items()), default=ACTIVE)
     question_type = models.IntegerField(choices=list(QUESTION_TYPE_CHOICES.items()), null=True, blank=True)
     answer_type = models.IntegerField(choices=list(ANSWER_TYPE_CHOICES.items()), null=True, blank=True)
+    difficulty = models.PositiveSmallIntegerField(
+        choices=list(DIFFICULTY_CHOICES.items()), null=True, blank=True, db_index=True,
+    )
     hint = models.TextField(null=True, blank=True)
     show_answer_explanation = models.BooleanField(default=False)
     show_hint = models.BooleanField(default=False)
@@ -136,6 +152,7 @@ class Question(models.Model):
             'correct': {'name': _('Correct'), 'desc': _('Answered correctly before')},
             'incorrect': {'name': _('Incorrect'), 'desc': _('Answered incorrectly before')},
             'marked': {'name': _('Marked'), 'desc': _('Marked questions')},
+            'saved': {'name': _('Saved'), 'desc': _('Saved questions')},
         }
 
 
@@ -469,6 +486,7 @@ class ExamTrail(models.Model):
     QUESTION_MODE_INCORRECT = 'incorrect'
     QUESTION_MODE_OMITTED = 'omitted'
     QUESTION_MODE_MARKED = 'marked'
+    QUESTION_MODE_SAVED = 'saved'
     QUESTION_MODE_CHOICES = [
         (QUESTION_MODE_ALL, _('All')),
         (QUESTION_MODE_UNUSED, _('Unused')),
@@ -477,6 +495,7 @@ class ExamTrail(models.Model):
         (QUESTION_MODE_INCORRECT, _('Incorrect')),
         (QUESTION_MODE_OMITTED, _('Omitted')),
         (QUESTION_MODE_MARKED, _('Marked')),
+        (QUESTION_MODE_SAVED, _('Saved')),
     ]
 
     title = models.CharField(max_length=255)
@@ -490,6 +509,9 @@ class ExamTrail(models.Model):
     mode = models.CharField(max_length=10, choices=MODE_CHOICES, default=MODE_TUTOR)
     is_timed_mode = models.BooleanField(default=False)
     question_mode = models.CharField(max_length=10, choices=QUESTION_MODE_CHOICES, default=QUESTION_MODE_ALL)
+    # Null means mixed difficulty.
+    difficulty = models.PositiveSmallIntegerField(choices=list(Question.DIFFICULTY_CHOICES.items()), null=True, blank=True)
+    shuffle_answers = models.BooleanField(default=False)
     total_questions = models.PositiveIntegerField(default=0)
     correct_answers = models.PositiveIntegerField(default=0)
     wrong_answers = models.PositiveIntegerField(default=0)
@@ -581,9 +603,18 @@ class ExamTrail(models.Model):
             sub_sub_category_ids=sub_sub_categories,
             section_ids=sections,
             topic_ids=topics,
+            difficulty=self.difficulty,
         )).distinct()
 
-    def save_details(self):
+    def answer_order(self, question_id, answer_ids):
+        """The answer order shown for a question: shuffled once per trail when requested, so reloads keep it."""
+        if not self.shuffle_answers:
+            return list(answer_ids)
+        ordered = list(answer_ids)
+        random.Random(f'{self.pk}-{question_id}').shuffle(ordered)
+        return ordered
+
+    def save_details(self, randomize=True):
         sub_categories = list(self.sub_categories.values_list('id', flat=True))
         sub_sub_categories = list(self.sub_sub_categories.values_list('id', flat=True))
         sections = list(self.sections.values_list('id', flat=True))
@@ -630,8 +661,12 @@ class ExamTrail(models.Model):
         elif self.question_mode == self.QUESTION_MODE_MARKED:
             marked = self._marked_questions(credential_questions)
             questions = questions.filter(id__in=marked)
+        elif self.question_mode == self.QUESTION_MODE_SAVED:
+            questions = questions.filter(saved_by__user=self.user)
 
-        question_ids = list(questions.order_by('?').values_list('id', flat=True).distinct()[:self.question_count])
+        # Details are read back ordered by id, so this order is the order the questions are asked in.
+        ordering = '?' if randomize else 'id'
+        question_ids = list(questions.order_by(ordering).values_list('id', flat=True).distinct()[:self.question_count])
 
         if not question_ids:
             raise ValueError('No questions found for selected criteria.')
@@ -654,15 +689,13 @@ class ExamTrail(models.Model):
         ).values_list('question_id', flat=True).distinct())
 
     def _correct_questions(self, credential_questions):
-        return list(ExamTrialDetail.objects.filter(
-            exam_trail__user=self.user,
+        return list(ExamTrialDetail.graded_for(self.user).filter(
             question_id__in=credential_questions,
             is_correct=True
         ).values_list('question_id', flat=True).distinct())
 
     def _incorrect_questions(self, credential_questions):
-        return list(ExamTrialDetail.objects.filter(
-            exam_trail__user=self.user,
+        return list(ExamTrialDetail.graded_for(self.user).filter(
             question_id__in=credential_questions,
             is_correct=False
         ).values_list('question_id', flat=True).distinct())
@@ -973,6 +1006,7 @@ class ExamTrialDetail(models.Model):
     )
     is_correct = models.BooleanField(null=True, blank=True)
     is_marked = models.BooleanField(null=True, blank=True)
+    is_review = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -981,6 +1015,37 @@ class ExamTrialDetail(models.Model):
         verbose_name = _('Exam Trial Detail')
         verbose_name_plural = _('Exam Trial Details')
         unique_together = [('exam_trail', 'question')]
+
+    @classmethod
+    def graded_for(cls, user):
+        """Answered details whose grading the user may see (tutor mode, or a submitted exam)."""
+        return cls.objects.filter(
+            Q(exam_trail__status='completed') | Q(exam_trail__mode=ExamTrail.MODE_TUTOR),
+            exam_trail__user=user,
+            answer__isnull=False,
+        )
+
+
+class SavedQuestion(models.Model):
+    """A question the student bookmarked; the list is shared across all their exams."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='saved_questions'
+    )
+    question = models.ForeignKey(
+        Question,
+        on_delete=models.CASCADE,
+        related_name='saved_by'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'saved_questions'
+        verbose_name = _('Saved Question')
+        verbose_name_plural = _('Saved Questions')
+        unique_together = [('user', 'question')]
+        ordering = ['-created_at']
 
 
 
