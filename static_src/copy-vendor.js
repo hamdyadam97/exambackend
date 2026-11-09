@@ -19,6 +19,9 @@ for (const [src, dest] of files) {
     console.warn(`Missing vendor source: ${srcPath}`);
     continue;
   }
-  fs.copyFileSync(srcPath, destPath);
+  // Source maps are not shipped; a dangling sourceMappingURL makes collectstatic
+  // (whitenoise manifest storage) fail with MissingFileError.
+  const code = fs.readFileSync(srcPath, 'utf8').replace(/\n\/\/# sourceMappingURL=.*\s*$/, '\n');
+  fs.writeFileSync(destPath, code);
   console.log(`Copied ${src} -> ${destPath}`);
 }
