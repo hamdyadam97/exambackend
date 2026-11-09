@@ -7,16 +7,17 @@ from django.db.models import Count, Q, Prefetch
 from apps.content.models import (
     Category, QuestionsTopic, ExamSection,
     Blog, BlogComment, Testimonial, ContactMessage, SupportRequest,
-    AppInfo, Partner, Notification, NotificationReceipt, AiInstruction, Setting,
+    AppInfo, Partner, Notification, NotificationReceipt, AiInstruction, Setting, Faq,
 )
 from apps.content.serializers import (
     CategoryResource, TopicResource, SectionResource, BlogResource,
     BlogCommentResource, TestimonialResource, ContactMessageSerializer,
-    SupportRequestSerializer,
+    SupportRequestSerializer, FaqResource,
     AppInfoResource, PartnerResource, NotificationResource,
 )
 from apps.exams.models import Question
 from apps.packages.models import Package
+from apps.users.models import User
 from apps.packages.serializers import PackageResource
 from apps.core.utils import api_response, send_response, send_error, api_get, api_post
 from apps.core.services import OpenAiService
@@ -42,6 +43,7 @@ class LandingView(BaseApiView):
         packages = Package.objects.filter(status=1, is_trial=False).order_by('-created_at')[:6]
         partners = Partner.objects.filter(status=Partner.ACTIVE).order_by('order', 'name')
         app_info = AppInfo.objects.first()
+        faqs = Faq.objects.filter(status=Faq.ACTIVE).order_by('order', '-created_at')[:6]
 
         return send_response('success', {
             'categories': CategoryResource(categories, many=True, context={'request': request}).data,
@@ -50,7 +52,35 @@ class LandingView(BaseApiView):
             'packages': PackageResource(packages, many=True, context={'request': request}).data,
             'partners': PartnerResource(partners, many=True, context={'request': request}).data,
             'app_info': AppInfoResource(app_info, context={'request': request}).data if app_info else None,
+            'stats': _landing_stats(partners.count()),
+            'faqs': FaqResource(faqs, many=True).data,
+            'map_cities': [c.strip() for c in (Setting.value_of('home_map_cities') or '').split(',') if c.strip()],
         })
+
+
+def _landing_stats(partners_count):
+    """
+    Headline numbers for the home page. Each is computed from real data, unless an admin sets the
+    matching Setting (e.g. home_stat_students=50000) to show a figure of their own choosing.
+    """
+    from apps.exams.models import ExamTrail
+
+    completed = ExamTrail.objects.filter(status='completed', total_questions__gt=0)
+    scores = [c * 100 / t for c, t in completed.values_list('correct_answers', 'total_questions')]
+    computed = {
+        'students': User.objects.filter(role_type=User.ROLE_USER, deleted_at__isnull=True).count(),
+        'attempts': ExamTrail.objects.count(),
+        'pass_rate': round(100 * sum(1 for s in scores if s >= 50) / len(scores)) if scores else 0,
+        'partners': partners_count,
+    }
+    stats = {}
+    for key, value in computed.items():
+        override = Setting.value_of(f'home_stat_{key}')
+        try:
+            stats[key] = int(override) if override not in (None, '') else value
+        except ValueError:
+            stats[key] = value
+    return stats
 
 
 class HomeView(BaseApiView):
