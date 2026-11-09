@@ -25,10 +25,6 @@
       <a href="{% url 'dashboard:question_create' %}" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm">
         <i class="fa-solid fa-plus"></i> {% trans "Add New" %}
       </a>
-    {% elif section == 'exams' %}
-      <a href="{% url 'dashboard:exam_create' %}" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm">
-        <i class="fa-solid fa-plus"></i> {% trans "Add New" %}
-      </a>
     {% else %}
       <a href="{% url 'dashboard:create' section %}" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm">
         <i class="fa-solid fa-plus"></i> {% trans "Add New" %}
@@ -112,10 +108,6 @@
                     <a href="{% url 'dashboard:question_update' obj.pk %}" class="text-brand-600 hover:text-brand-700 dark:text-brand-400 font-medium">
                       {{ obj|dashboard_attr:col }}
                     </a>
-                  {% elif section == 'exams' %}
-                    <a href="{% url 'dashboard:exam_update' obj.pk %}" class="text-brand-600 hover:text-brand-700 dark:text-brand-400 font-medium">
-                      {{ obj|dashboard_attr:col }}
-                    </a>
                   {% else %}
                     <a href="{% url 'dashboard:update' section obj.pk %}" class="text-brand-600 hover:text-brand-700 dark:text-brand-400 font-medium">
                       {{ obj|dashboard_attr:col }}
@@ -137,10 +129,6 @@
               <div class="flex items-center gap-1">
                 {% if section == 'questions' %}
                   <a href="{% url 'dashboard:question_update' obj.pk %}" class="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 hover:bg-amber-100 flex items-center justify-center" title="{% trans 'Edit' %}">
-                    <i class="fa-solid fa-pen text-xs"></i>
-                  </a>
-                {% elif section == 'exams' %}
-                  <a href="{% url 'dashboard:exam_update' obj.pk %}" class="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 hover:bg-amber-100 flex items-center justify-center" title="{% trans 'Edit' %}">
                     <i class="fa-solid fa-pen text-xs"></i>
                   </a>
                 {% else %}

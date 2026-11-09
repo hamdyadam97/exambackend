@@ -18,13 +18,13 @@ from django.contrib.auth.mixins import UserPassesTestMixin
 
 from apps.users.models import User
 from apps.content.models import Category, Blog, Testimonial, SupportRequest
-from apps.exams.models import Question, Exam, ExamTrail, UserExam
+from apps.exams.models import Question, ExamTrail, UserExam
 from apps.packages.models import Package, UserPackage
 from apps.payments.models import PaymentTransaction, Invoice
 
 from apps.dashboard.registry import get_config
 from apps.dashboard.forms import BaseDashboardForm, UserDashboardForm
-from apps.dashboard.exam_forms import QuestionForm, AnswerFormSet, ExamForm, ExamQuestionFormSet
+from apps.dashboard.exam_forms import QuestionForm, AnswerFormSet
 
 
 class StaffRequiredMixin(UserPassesTestMixin):
@@ -46,7 +46,7 @@ class DashboardView(TemplateView):
             'users': User.objects.filter(deleted_at__isnull=True).count(),
             'users_last_30': User.objects.filter(date_joined__gte=last_30).count(),
             'questions': Question.objects.count(),
-            'exams': Exam.objects.count(),
+            'exams': ExamTrail.objects.count(),
             'exam_trails': ExamTrail.objects.count(),
             'categories': Category.objects.count(),
             'blogs': Blog.objects.count(),
@@ -130,7 +130,7 @@ class ReportsView(TemplateView):
         ctx['stats'] = {
             'users': User.objects.filter(deleted_at__isnull=True).count(),
             'questions': Question.objects.count(),
-            'exams': Exam.objects.count(),
+            'exams': ExamTrail.objects.count(),
             'subscriptions': UserPackage.objects.count(),
             'active_subscriptions': UserPackage.objects.filter(
                 subscription_status=UserPackage.ACTIVE,
@@ -558,50 +558,6 @@ class ModelImportView(ModelCRUDMixin, TemplateView):
             for err in errors[:10]:
                 messages.error(request, err)
         return HttpResponseRedirect(reverse_lazy('dashboard:list', kwargs={'section': self.section}))
-
-
-class ExamBaseView(StaffRequiredMixin):
-    """Base for exam create/update with inline questions."""
-
-    model = Exam
-    form_class = ExamForm
-    template_name = 'dashboard/exams/form.html'
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx['section'] = 'exams'
-        ctx['config'] = get_config('exams')
-        ctx['question_formset'] = ctx.get('question_formset') or self.get_question_formset()
-        return ctx
-
-    def get_question_formset(self):
-        raise NotImplementedError
-
-    def form_valid(self, form):
-        context = self.get_context_data()
-        question_formset = context['question_formset']
-        if question_formset.is_valid():
-            self.object = form.save()
-            question_formset.instance = self.object
-            question_formset.save()
-            return HttpResponseRedirect(self.get_success_url())
-        return self.render_to_response(self.get_context_data(form=form))
-
-
-class ExamCreateView(ExamBaseView, CreateView):
-    def get_question_formset(self):
-        return ExamQuestionFormSet(prefix='questions')
-
-    def get_success_url(self):
-        return reverse_lazy('dashboard:list', kwargs={'section': 'exams'})
-
-
-class ExamUpdateView(ExamBaseView, UpdateView):
-    def get_question_formset(self):
-        return ExamQuestionFormSet(instance=self.object, prefix='questions')
-
-    def get_success_url(self):
-        return reverse_lazy('dashboard:list', kwargs={'section': 'exams'})
 
 
 class QuestionBaseView(StaffRequiredMixin):

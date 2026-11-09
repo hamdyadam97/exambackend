@@ -1,6 +1,6 @@
 from django import forms
 from django.forms import inlineformset_factory
-from apps.exams.models import Question, Answer, Exam, ExamQuestion
+from apps.exams.models import Question, Answer
 from apps.dashboard.forms import BaseDashboardForm
 
 
@@ -37,30 +37,4 @@ AnswerFormSet = inlineformset_factory(
     extra=4,
     can_delete=True,
     fields=['answer_option'],
-)
-
-
-class ExamForm(BaseDashboardForm):
-    """Exam header form."""
-
-    class Meta:
-        model = Exam
-        exclude = ['created_at', 'updated_at', 'deleted_at']
-
-
-class ExamQuestionForm(BaseDashboardForm):
-    """Inline exam-question form."""
-
-    class Meta:
-        model = ExamQuestion
-        fields = ['question', 'order']
-
-
-ExamQuestionFormSet = inlineformset_factory(
-    Exam,
-    ExamQuestion,
-    form=ExamQuestionForm,
-    extra=3,
-    can_delete=True,
-    fields=['question', 'order'],
 )

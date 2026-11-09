@@ -3,8 +3,8 @@ from django.db.models import Count
 from django.utils.translation import gettext_lazy as _
 from apps.core.admin_site import admin_site
 from apps.exams.models import (
-    Question, Answer, QuestionTopic, ExamSectionLink, Exam, ExamQuestion,
-    UserExam, UserExamAnswer, UserExamTrial, ExamTrail, ExamTrialDetail, SavedQuestion,
+    Question, Answer, QuestionTopic, ExamSectionLink,
+    ExamTrail, ExamTrialDetail, SavedQuestion,
     ExamTrailCategoryLink, ExamTrailSubCategoryLink, ExamTrailSubSubCategoryLink,
     ExamTrailSectionLink, ExamTrailTopicLink,
 )
@@ -136,122 +136,6 @@ class AnswerAdmin(admin.ModelAdmin):
 
 
 admin_site.register(Answer, AnswerAdmin)
-class ExamQuestionInline(admin.TabularInline):
-    model = ExamQuestion
-    extra = 1
-    autocomplete_fields = ['question']
-
-
-class ExamAdmin(admin.ModelAdmin):
-    list_display = [
-        'title', 'category', 'sub_category', 'sub_sub_category',
-        'duration_minutes', 'question_count', 'difficulty_level',
-        'attempts_allowed', 'is_featured',
-        'exam_type', 'language', 'status', 'created_at',
-    ]
-    list_filter = ['status', 'difficulty_level', 'is_featured', 'exam_type', 'language', 'category', 'created_at']
-    search_fields = ['title', 'description']
-    inlines = [ExamQuestionInline]
-    autocomplete_fields = ['category', 'sub_category', 'sub_sub_category']
-    list_select_related = ['category', 'sub_category', 'sub_sub_category']
-    date_hierarchy = 'created_at'
-    actions = ['publish', 'unpublish', 'make_featured', 'remove_featured']
-    readonly_fields = ['created_at', 'updated_at', 'deleted_at']
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).annotate(question_count=Count('exam_questions'))
-
-    @admin.display(description=_('Questions'))
-    def question_count(self, obj):
-        return obj.question_count
-
-    @admin.action(description=_('Publish selected exams'))
-    def publish(self, request, queryset):
-        queryset.update(status=Exam.ACTIVE)
-
-    @admin.action(description=_('Unpublish selected exams'))
-    def unpublish(self, request, queryset):
-        queryset.update(status=Exam.INACTIVE)
-
-    @admin.action(description=_('Mark selected exams as featured'))
-    def make_featured(self, request, queryset):
-        queryset.update(is_featured=True)
-
-    @admin.action(description=_('Remove featured flag from selected exams'))
-    def remove_featured(self, request, queryset):
-        queryset.update(is_featured=False)
-
-
-
-admin_site.register(Exam, ExamAdmin)
-class ExamQuestionAdmin(admin.ModelAdmin):
-    list_display = ['exam', 'question', 'order', 'created_at']
-    list_filter = ['exam']
-    search_fields = ['exam__title', 'question__text_question']
-    autocomplete_fields = ['exam', 'question']
-    list_editable = ['order']
-    list_select_related = ['exam', 'question']
-    readonly_fields = ['created_at', 'updated_at', 'deleted_at']
-
-
-
-admin_site.register(ExamQuestion, ExamQuestionAdmin)
-class UserExamAnswerInline(admin.TabularInline):
-    model = UserExamAnswer
-    extra = 0
-    readonly_fields = ['user', 'exam', 'question', 'answer', 'is_correct', 'created_at']
-    can_delete = False
-
-
-class UserExamAdmin(admin.ModelAdmin):
-    list_display = [
-        'user', 'exam', 'status', 'score',
-        'correct_answers', 'wrong_answers', 'start_date', 'created_at',
-    ]
-    list_filter = ['status', 'created_at', 'start_date']
-    search_fields = ['user__phone', 'exam__title']
-    autocomplete_fields = ['user', 'exam']
-    list_select_related = ['user', 'exam']
-    inlines = [UserExamAnswerInline]
-    date_hierarchy = 'created_at'
-    actions = ['recalculate_scores']
-    readonly_fields = ['created_at', 'updated_at', 'deleted_at']
-
-    @admin.action(description=_('Recalculate scores for selected user exams'))
-    def recalculate_scores(self, request, queryset):
-        for user_exam in queryset:
-            correct = user_exam.answers.filter(is_correct=True).count()
-            wrong = user_exam.answers.filter(is_correct=False).count()
-            user_exam.correct_answers = correct
-            user_exam.wrong_answers = wrong
-            user_exam.score = correct
-            user_exam.save(update_fields=['correct_answers', 'wrong_answers', 'score'])
-
-
-
-admin_site.register(UserExam, UserExamAdmin)
-class UserExamAnswerAdmin(admin.ModelAdmin):
-    list_display = ['user', 'exam', 'question', 'answer', 'is_correct', 'created_at']
-    list_filter = ['is_correct', 'created_at']
-    search_fields = ['user__phone', 'exam__title', 'question__text_question']
-    autocomplete_fields = ['user', 'exam', 'question']
-    list_select_related = ['user', 'exam', 'question']
-    readonly_fields = ['created_at', 'updated_at']
-
-
-
-admin_site.register(UserExamAnswer, UserExamAnswerAdmin)
-class UserExamTrialAdmin(admin.ModelAdmin):
-    list_display = ['user', 'exam', 'date', 'created_at']
-    list_filter = ['date', 'created_at']
-    search_fields = ['user__phone', 'exam__title']
-    autocomplete_fields = ['user', 'exam', 'subscription']
-    date_hierarchy = 'created_at'
-    readonly_fields = ['created_at', 'updated_at']
-
-
-
-admin_site.register(UserExamTrial, UserExamTrialAdmin)
 class ExamTrialDetailInline(admin.TabularInline):
     model = ExamTrialDetail
     extra = 0
