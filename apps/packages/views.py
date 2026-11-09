@@ -2,9 +2,11 @@
 Package API views.
 """
 import uuid
+from decimal import Decimal
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.db.models import Count, Q
+from django.conf import settings
+from django.db.models import Count, F, Q
 from apps.packages.models import Package, UserPackage, DiscountCode
 from apps.packages.serializers import (
     PackageResource, UserPackageResource, CheckCouponSerializer, SubscribeSerializer,
@@ -13,7 +15,8 @@ from apps.payments.models import PaymentTransaction
 from apps.content.models import Category
 from apps.content.serializers import CategoryResource
 from apps.core.utils import api_response, send_response, send_error, api_get, api_post
-from apps.core.services import CouponService, HyperPayService
+from apps.core.services import CouponService
+from apps.payments.services import HyperPayService, HyperPayError
 from django.utils import timezone
 
 
@@ -196,9 +199,11 @@ class SubscribeView(BaseApiView):
             period_days = int(package.period_days or 0)
 
         coupon_code = serializer.validated_data.get('coupon')
+        coupon_valid = False
         if coupon_code:
             coupon_result = CouponService.check_coupon(coupon_code, price)
-            if coupon_result['valid']:
+            coupon_valid = coupon_result['valid']
+            if coupon_valid:
                 price = coupon_result['final_price']
 
         if price == 0:
@@ -209,40 +214,43 @@ class SubscribeView(BaseApiView):
                 end_date=timezone.now().date() + timezone.timedelta(days=period_days),
                 price=0,
             )
+            if coupon_valid:
+                DiscountCode.objects.filter(code=coupon_code).update(used_count=F('used_count') + 1)
             return api_response(True, 'Subscribed successfully', {
                 'subscription': UserPackageResource(sub, context={'request': request}).data,
             })
 
-        checkout = HyperPayService.create_checkout(price)
-        if not checkout.get('checkout_id'):
-            # Gateway not configured: create a pending transaction the user
-            # completes through the built-in checkout page (simulation flow).
-            tx = PaymentTransaction.objects.create(
-                user=request.user,
-                package=package,
-                transaction_type='checkout',
-                payment_id=uuid.uuid4().hex[:20],
-                amount=price,
-                currency='JOD',
-                result_summary={
-                    'custom_days': custom_days,
-                    'coupon': coupon_code,
-                    'period_days': period_days,
-                },
+        # Paid package: open a HyperPay checkout. The subscription is only granted after the
+        # server confirms the payment with HyperPay (see payments.views.ConfirmPaymentView).
+        if not HyperPayService.is_configured():
+            return send_error(
+                'Online payment unavailable',
+                {'payment': ['Online payment is not available right now. Please contact us to subscribe.']},
+                503,
             )
-            checkout = {'checkout_id': tx.payment_id, 'url': f'/payment/checkout?id={tx.payment_id}'}
+
+        amount = Decimal(str(price)).quantize(Decimal('0.01'))
+        tx = PaymentTransaction.objects.create(
+            user=request.user,
+            package=package,
+            transaction_type='checkout',
+            payment_id=uuid.uuid4().hex[:20],
+            amount=amount,
+            currency=settings.PAYMENT_CURRENCY,
+            coupon_code=coupon_code if coupon_code and coupon_valid else None,
+            result_summary={'custom_days': custom_days, 'period_days': period_days},
+        )
+        try:
+            checkout_id = HyperPayService.create_checkout(amount, tx.currency, tx.payment_id)
+        except HyperPayError:
+            return send_error('Online payment unavailable', {'payment': ['Payment gateway unavailable, please try again.']}, 503)
+        tx.result_summary = {**tx.result_summary, 'checkout_id': checkout_id}
+        tx.save(update_fields=['result_summary', 'updated_at'])
 
         return api_response(True, 'Redirect to payment', {
-            'checkout': checkout,
-            'amount': price,
+            'checkout': {'payment_id': tx.payment_id, 'url': f'/payment/checkout?id={tx.payment_id}'},
+            'amount': amount,
             'period_days': period_days,
         })
 
 
-class StoreSubscribeView(BaseApiView):
-    permission_classes = [IsAuthenticated]
-
-    @api_post('StoreSubscribe')
-    def post(self, request):
-        # Placeholder for payment callback handling
-        return api_response(True, 'Subscription stored', {})

@@ -1,7 +1,11 @@
 """
 Test settings using SQLite for quick migration validation.
 """
-from config.settings import *  # noqa: F401, F403
+import os
+
+# Tests must not depend on the developer's .env for the key check in settings.py.
+os.environ.setdefault('SECRET_KEY', 'test-only-secret-key')
+from config.settings import *  # noqa: F401, F403, E402
 
 DATABASES = {
     'default': {

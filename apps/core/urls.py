@@ -26,10 +26,10 @@ from apps.exams.views import (
 from apps.packages.views import (
     PackageDataView, PackageListView, PackageDetailView, RelatedPackagesView,
     UserSubscriptionView, CheckCouponView,
-    SubscribeView, StoreSubscribeView, PackageCalculatePriceView,
+    SubscribeView, PackageCalculatePriceView,
     SubCategoryPackagesView,
 )
-from apps.payments.views import PaymentCallbackView, PaymentStatusView, PaymentInfoView, ConfirmPaymentView
+from apps.payments.views import PaymentInfoView, ConfirmPaymentView
 
 urlpatterns = [
     # Auth
@@ -112,13 +112,10 @@ urlpatterns = [
     path('packages/<int:pk>/related', RelatedPackagesView.as_view(), name='package-related'),
     path('packages/user-subscription', UserSubscriptionView.as_view(), name='user-subscription'),
     path('packages/subscribe', SubscribeView.as_view(), name='package-subscribe'),
-    path('packages/store-subscribe', StoreSubscribeView.as_view(), name='package-store-subscribe'),
     path('packages/check-coupon', CheckCouponView.as_view(), name='check-coupon'),
     path('packages/calculate-price', PackageCalculatePriceView.as_view(), name='package-calculate-price'),
 
     # Payments
-    path('payment-callback', PaymentCallbackView.as_view(), name='payment-callback'),
-    path('package-payment', PaymentStatusView.as_view(), name='package-payment'),
     path('payment/info', PaymentInfoView.as_view(), name='payment-info'),
     path('payment/confirm', ConfirmPaymentView.as_view(), name='payment-confirm'),
 ]

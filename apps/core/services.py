@@ -32,8 +32,12 @@ class SmsService:
             except Exception as e:
                 logger.error('OTP SMS FAILED', extra={'mobile': mobile, 'error': str(e)})
                 return False
-        logger.warning('SMS provider not configured; OTP not sent.')
-        return True  # Allow dev flow
+        if settings.DEBUG:
+            # Development only: there is no SMS gateway, so show the code to whoever runs the server.
+            logger.warning('SMS provider not configured; OTP for %s is %s', mobile, otp)
+            return True
+        logger.error('SMS provider not configured; OTP could not be sent to the user.')
+        return False
 
 
 class CouponService:
@@ -68,19 +72,6 @@ class CouponService:
             'final_price': final_price,
             'coupon': coupon_code,
         }
-
-
-class HyperPayService:
-    @staticmethod
-    def create_checkout(amount, currency='JOD', payment_type='visa'):
-        if not settings.HYPERPAY_ENTITY_ID:
-            return {'checkout_id': None, 'url': None, 'error': 'HyperPay not configured'}
-        # Placeholder for HyperPay integration.
-        return {'checkout_id': None, 'url': None}
-
-    @staticmethod
-    def get_payment_status(resource_path):
-        return {}
 
 
 class PhenixBillingService:

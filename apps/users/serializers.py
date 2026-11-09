@@ -93,6 +93,8 @@ class ForgetPasswordSerializer(serializers.Serializer):
 
 class ResetPasswordSerializer(serializers.Serializer):
     phone = serializers.CharField()
+    # Issued by /forget-verify-otp; proves the OTP step was passed for this phone.
+    reset_token = serializers.CharField()
     password = serializers.CharField(min_length=8)
     password_confirmation = serializers.CharField(min_length=8)
 

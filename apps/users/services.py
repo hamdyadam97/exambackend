@@ -34,6 +34,15 @@ class OtpService:
         return otp
 
     @classmethod
+    def send(cls, phone: str, ip_address=None):
+        """Create a new OTP for the phone and send it by SMS. Earlier codes stop working."""
+        from apps.core.services import SmsService
+        OtpRequest.objects.filter(phone=phone, verified=False).update(verified=True)
+        otp = cls.generate(phone, ip_address)
+        SmsService.send_otp(phone, otp)
+        return otp
+
+    @classmethod
     def verify(cls, phone: str, otp: str):
         latest = OtpRequest.objects.filter(phone=phone, verified=False).order_by('-created_at').first()
         if not latest:
@@ -56,6 +65,38 @@ class OtpService:
         if not latest:
             return True
         return latest.created_at < timezone.now() - timezone.timedelta(minutes=1)
+
+
+class PasswordResetService:
+    """One-time tickets that prove a phone was verified by OTP before its password may be reset."""
+
+    EXPIRY_MINUTES = 15
+
+    @staticmethod
+    def _hash(token: str) -> str:
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    @classmethod
+    def issue(cls, user: User) -> str:
+        from django.utils.crypto import get_random_string
+        token = get_random_string(48)
+        PasswordResetToken.objects.filter(user=user, used=False).update(used=True)
+        PasswordResetToken.objects.create(
+            user=user,
+            token_hash=cls._hash(token),
+            expires_at=timezone.now() + timezone.timedelta(minutes=cls.EXPIRY_MINUTES),
+        )
+        return token
+
+    @classmethod
+    def consume(cls, user: User, token: str) -> bool:
+        """True (and the ticket is spent) when the token is valid for this user."""
+        if not token:
+            return False
+        updated = PasswordResetToken.objects.filter(
+            user=user, token_hash=cls._hash(token), used=False, expires_at__gt=timezone.now(),
+        ).update(used=True)
+        return updated == 1
 
 
 class UserService:

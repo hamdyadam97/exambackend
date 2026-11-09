@@ -4,17 +4,37 @@ Django settings for RootsExams project.
 import os
 from pathlib import Path
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-me-in-production')
 
-DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
+def env_list(name, default=''):
+    return [item.strip() for item in os.environ.get(name, default).split(',') if item.strip()]
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
+
+# Safe by default: a server without DEBUG in its .env runs in production mode.
+DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
+
+_INSECURE_KEY = 'django-insecure-change-me-in-production'
+SECRET_KEY = os.environ.get('SECRET_KEY', _INSECURE_KEY)
+if not DEBUG and SECRET_KEY in (_INSECURE_KEY, 'change-me-in-production'):
+    raise ImproperlyConfigured('Set a unique SECRET_KEY in .env before running with DEBUG=False.')
+
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
+# Origins allowed to POST forms (the Django admin) when the site is served over HTTPS.
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
+
+# nginx terminates TLS and tells Django the original scheme.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '2592000'))  # 30 days, this host only
 
 # Application definition
 INSTALLED_APPS = [
@@ -153,10 +173,7 @@ SIMPLE_JWT = {
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWED_ORIGINS = os.environ.get(
-    'CORS_ALLOWED_ORIGINS',
-    'http://localhost:5173,http://127.0.0.1:5173'
-).split(',')
+CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
 
 # Swagger / Spectacular
 SPECTACULAR_SETTINGS = {
@@ -175,7 +192,10 @@ BROADNET_SID = os.environ.get('BROADNET_SID', '')
 # HyperPay
 HYPERPAY_ENTITY_ID = os.environ.get('HYPERPAY_ENTITY_ID', '')
 HYPERPAY_AUTHORIZATION = os.environ.get('HYPERPAY_AUTHORIZATION', '')
-HYPERPAY_BASE_URL = os.environ.get('HYPERPAY_BASE_URL', 'https://eu-test.oppwa.com')
+# eu-test.oppwa.com is HyperPay's sandbox; live merchants use https://eu-prod.oppwa.com
+HYPERPAY_BASE_URL = os.environ.get('HYPERPAY_BASE_URL', 'https://eu-test.oppwa.com').rstrip('/')
+HYPERPAY_BRANDS = os.environ.get('HYPERPAY_BRANDS', 'VISA MASTER')
+PAYMENT_CURRENCY = os.environ.get('PAYMENT_CURRENCY', 'JOD')
 
 # OpenAI
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')

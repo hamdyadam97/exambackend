@@ -16,9 +16,11 @@ def _key(phone: str, ip: str) -> str:
 
 
 def client_ip(request) -> str:
+    # nginx appends the real client address ($proxy_add_x_forwarded_for), so the last entry is the
+    # trustworthy one; earlier entries are whatever the client chose to send.
     forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
     if forwarded:
-        return forwarded.split(',')[0].strip()
+        return forwarded.split(',')[-1].strip()
     return request.META.get('REMOTE_ADDR', '') or ''
 
 

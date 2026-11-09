@@ -15,8 +15,9 @@ from apps.users.serializers import (
     VerifyOtpSerializer, ForgetPasswordSerializer, ResetPasswordSerializer,
     UpdateProfileSerializer, UpdatePasswordSerializer,
 )
-from apps.core.utils import api_response, send_response, send_error, api_get, api_post, rearrange_tele_input_data, generate_otp
-from apps.core.services import SmsService
+from apps.core.utils import api_response, send_response, send_error, api_get, api_post, rearrange_tele_input_data
+from apps.users.services import OtpService, PasswordResetService
+from apps.users.throttling import client_ip, is_throttled, register_failed_attempt, clear_attempts
 
 logger = logging.getLogger('api')
 
@@ -48,6 +49,30 @@ class BaseApiView(APIView):
     pass
 
 
+def _phone_from(data):
+    """The phone from a request body: `phone`, `mobile` (what the web app sends), or dial_code + mobile_number."""
+    if data.get('mobile_number'):
+        return rearrange_tele_input_data(data.copy()).get('phone', '')
+    return str(data.get('phone') or data.get('mobile') or '').strip()
+
+
+def _verify_otp_request(request):
+    """Check the OTP in the request; returns (user, None) on success or (None, error response)."""
+    serializer = VerifyOtpSerializer(data={'phone': _phone_from(request.data), 'otp': request.data.get('otp')})
+    if not serializer.is_valid():
+        return None, send_error('Validation Errors', serializer.errors, 422)
+
+    user = User.objects.filter(phone=serializer.validated_data['phone']).first()
+    if not user:
+        return None, send_error('Validation Errors', {'phone': ['Invalid phone number.']}, 422)
+
+    ok, message = OtpService.verify(user.phone, serializer.validated_data['otp'])
+    if not ok:
+        status = 429 if message == 'Too many attempts' else 422
+        return None, send_error('Validation Errors', {'otp': [message]}, status)
+    return user, None
+
+
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
     return {
@@ -71,7 +96,6 @@ class SignupView(BaseApiView):
         validated = serializer.validated_data
         try:
             with transaction.atomic():
-                otp = generate_otp()
                 user = User.objects.create(
                     first_name=validated['first_name'],
                     last_name=validated['last_name'],
@@ -79,8 +103,6 @@ class SignupView(BaseApiView):
                     phone=validated['phone'],
                     email=validated.get('email'),
                     role_type=User.ROLE_USER,
-                    otp=otp,
-                    otp_expires_at=timezone.now() + timezone.timedelta(minutes=20),
                 )
                 user.set_password(validated['password'])
                 user.save()
@@ -91,10 +113,11 @@ class SignupView(BaseApiView):
                     birth_date=validated['birth_date'],
                     profile_completed=True,
                 )
-                SmsService.send_otp(user.phone, otp)
-                return send_response('User details saved successfully', {'user': UserResource(user, context={'request': request}).data})
-        except Exception as e:
-            return send_error('User details not saved', {'UserDetailsNotSaved': [str(e)]}, 400)
+        except Exception:
+            logger.exception('Signup failed (phone=%s)', _mask_phone(validated.get('phone')))
+            return send_error('User details not saved', {'UserDetailsNotSaved': ['Could not create the account.']}, 400)
+        OtpService.send(user.phone, client_ip(request))
+        return send_response('User details saved successfully', {'user': UserResource(user, context={'request': request}).data})
 
 
 class VerifyOtpView(BaseApiView):
@@ -102,25 +125,12 @@ class VerifyOtpView(BaseApiView):
 
     @api_post('VerifyOtp', request=VerifyOtpSerializer)
     def post(self, request):
-        serializer = VerifyOtpSerializer(data=request.data)
-        if not serializer.is_valid():
-            return send_error('Validation Errors', serializer.errors, 422)
-
-        try:
-            user = User.objects.get(phone=serializer.validated_data['phone'])
-        except User.DoesNotExist:
-            return send_error('Validation Errors', {'phone': ['Invalid phone number.']}, 422)
-
-        if not user.otp_expires_at or user.otp_expires_at < timezone.now():
-            return send_error('Validation Errors', {'otp': ['OTP expired']}, 422)
-
-        if user.otp != serializer.validated_data['otp']:
-            return send_error('Validation Errors', {'otp': ['Invalid OTP']}, 422)
+        user, error = _verify_otp_request(request)
+        if error:
+            return error
 
         user.is_phone_verified = True
-        user.otp = None
-        user.otp_expires_at = None
-        user.save()
+        user.save(update_fields=['is_phone_verified'])
 
         user.make_trial_subscription()
         tokens = get_tokens_for_user(user)
@@ -135,23 +145,19 @@ class ResendOtpView(BaseApiView):
 
     @api_post('ResendOtp')
     def post(self, request):
-        phone = request.data.get('phone')
+        phone = _phone_from(request.data)
         try:
             user = User.objects.get(phone=phone)
         except User.DoesNotExist:
             return send_error('Validation Errors', {'phone': ['Invalid phone number.']}, 422)
 
-        if user.otp_expires_at and user.otp_expires_at > timezone.now():
-            return send_error('Too Many Requests', {'otp': ['OTP already sent, please wait']}, 429)
+        if not OtpService.can_resend(user.phone):
+            return send_error('Too Many Requests', {'otp': ['OTP already sent, please wait a minute']}, 429)
 
-        otp = generate_otp()
-        user.otp = otp
-        user.otp_expires_at = timezone.now() + timezone.timedelta(minutes=20)
-        user.save()
-        SmsService.send_otp(user.phone, otp)
+        OtpService.send(user.phone, client_ip(request))
         return send_response('OTP Send Successfully', {
             'phone': user.phone,
-            'expires_at': user.otp_expires_at,
+            'expires_at': timezone.now() + timezone.timedelta(minutes=OtpService.EXPIRY_MINUTES),
         })
 
 
@@ -160,22 +166,16 @@ class CheckVerificationView(BaseApiView):
 
     @api_post('CheckVerification')
     def post(self, request):
-        phone = request.data.get('phone')
+        # Only reports whether the phone still needs verifying; it never logs anyone in.
+        phone = _phone_from(request.data)
         try:
             user = User.objects.get(phone=phone)
         except User.DoesNotExist:
             return send_error('Validation Errors', {'phone': ['Invalid phone number.']}, 422)
 
-        if user.is_phone_verified:
-            user.make_trial_subscription()
-            tokens = get_tokens_for_user(user)
-            return send_response('success', {
-                **tokens,
-                'user': UserResource(user, context={'request': request}).data,
-            })
         return send_response('success', {
             'user': {'phone': user.phone},
-            'go_to_verify': True,
+            'go_to_verify': not user.is_phone_verified,
         })
 
 
@@ -192,16 +192,21 @@ class LoginView(BaseApiView):
 
         phone = serializer.validated_data['phone']
         password = serializer.validated_data['password']
+        ip = client_ip(request)
 
-        try:
-            user = User.objects.get(phone=phone)
-        except User.DoesNotExist:
+        if is_throttled(phone, ip):
+            return send_error(
+                'Too Many Requests',
+                {'TooManyAttempts': ['Too many failed attempts. Please try again in 10 minutes.']},
+                429,
+            )
+
+        user = User.objects.filter(phone=phone).first()
+        if not user or not check_password(password, user.password):
+            register_failed_attempt(phone, ip)
             _log_failed_login(request, phone)
             return send_error('Unauthorised', {'WrongCredentials': ['Phone number or password is wrong.']}, 422)
-
-        if not check_password(password, user.password):
-            _log_failed_login(request, phone)
-            return send_error('Unauthorised', {'WrongCredentials': ['Phone number or password is wrong.']}, 422)
+        clear_attempts(phone, ip)
 
         # Block suspended (status != ACTIVE), soft-deleted, or deactivated accounts.
         # Checked only after the password is verified so account state is never
@@ -227,11 +232,8 @@ class LoginView(BaseApiView):
             )
 
         if not user.is_phone_verified:
-            otp = generate_otp()
-            user.otp = otp
-            user.otp_expires_at = timezone.now() + timezone.timedelta(minutes=20)
-            user.save()
-            SmsService.send_otp(user.phone, otp)
+            if OtpService.can_resend(user.phone):
+                OtpService.send(user.phone, ip)
             return send_response('OTP Send Successfully', {
                 'user': {'phone': user.phone},
                 'go_to_verify': True,
@@ -249,22 +251,18 @@ class ForgetPasswordView(BaseApiView):
 
     @api_post('ForgetPassword')
     def post(self, request):
-        data = request.data.copy()
-        data = rearrange_tele_input_data(data)
-        phone = data.get('phone')
+        phone = _phone_from(request.data)
         try:
             user = User.objects.get(phone=phone)
         except User.DoesNotExist:
             return send_error('Validation Errors', {'phone': ['Invalid phone number.']}, 422)
 
-        otp = generate_otp()
-        user.otp = otp
-        user.otp_expires_at = timezone.now() + timezone.timedelta(minutes=20)
-        user.save()
-        SmsService.send_otp(user.phone, otp)
-        return send_response('OTP Send Successfully', {
-            'user': UserResource(user, context={'request': request}).data,
-        })
+        if not OtpService.can_resend(user.phone):
+            return send_error('Too Many Requests', {'otp': ['OTP already sent, please wait a minute']}, 429)
+
+        OtpService.send(user.phone, client_ip(request))
+        # Only the phone is returned: the caller has not proven they own this account yet.
+        return send_response('OTP Send Successfully', {'user': {'phone': user.phone}})
 
 
 class VerifyOtpForForgetView(BaseApiView):
@@ -272,27 +270,16 @@ class VerifyOtpForForgetView(BaseApiView):
 
     @api_post('VerifyOtpForForget', request=VerifyOtpSerializer)
     def post(self, request):
-        serializer = VerifyOtpSerializer(data=request.data)
-        if not serializer.is_valid():
-            return send_error('Validation Errors', serializer.errors, 422)
+        user, error = _verify_otp_request(request)
+        if error:
+            return error
 
-        try:
-            user = User.objects.get(phone=serializer.validated_data['phone'])
-        except User.DoesNotExist:
-            return send_error('Validation Errors', {'phone': ['Invalid phone number.']}, 422)
-
-        if not user.otp_expires_at or user.otp_expires_at < timezone.now():
-            return send_error('Validation Errors', {'otp': ['OTP expired']}, 422)
-
-        if user.otp != serializer.validated_data['otp']:
-            return send_error('Validation Errors', {'otp': ['Invalid OTP']}, 422)
-
-        user.otp = None
-        user.otp_expires_at = None
         user.is_phone_verified = True
-        user.save()
+        user.save(update_fields=['is_phone_verified'])
+        # The reset ticket is the only thing /reset accepts as proof that this OTP step passed.
         return send_response('OTP Verification Successfully', {
-            'user': UserResource(user, context={'request': request}).data,
+            'user': {'phone': user.phone},
+            'reset_token': PasswordResetService.issue(user),
         })
 
 
@@ -301,20 +288,20 @@ class ResetPasswordView(BaseApiView):
 
     @api_post('ResetPassword', request=ResetPasswordSerializer)
     def post(self, request):
-        serializer = ResetPasswordSerializer(data=request.data)
+        serializer = ResetPasswordSerializer(data={**request.data, 'phone': _phone_from(request.data)})
         if not serializer.is_valid():
             return send_error('Validation Errors', serializer.errors, 422)
 
-        try:
-            user = User.objects.get(phone=serializer.validated_data['phone'])
-        except User.DoesNotExist:
-            return send_error('Validation Errors', {'phone': ['Invalid phone number.']}, 422)
+        user = User.objects.filter(phone=serializer.validated_data['phone']).first()
+        if not user or not PasswordResetService.consume(user, serializer.validated_data['reset_token']):
+            return send_error(
+                'Validation Errors',
+                {'reset_token': ['This reset link is invalid or has expired. Please request a new code.']},
+                422,
+            )
 
         user.set_password(serializer.validated_data['password'])
-        user.is_phone_verified = True
-        user.otp = None
-        user.otp_expires_at = None
-        user.save()
+        user.save(update_fields=['password'])
 
         tokens = get_tokens_for_user(user)
         return send_response('Reset Password Done Successfully', {

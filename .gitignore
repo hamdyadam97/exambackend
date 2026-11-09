@@ -26,3 +26,11 @@ htmlcov/
 .vscode/
 *.sublime-project
 *.sublime-workspace
+
+# Local-only artifacts
+db_dev.sqlite3
+db_test.sqlite3
+admin_rendered.html
+node_modules/
+static_src/twtest/
+logs/
