@@ -270,7 +270,32 @@ class AuthFlowSecurityTests(TestCase):
         self.assertTrue(User.objects.get(phone=phone).is_phone_verified)
 
 
-class OtpServiceTests(TestCase):
+    def signup(self, number, **extra):
+        return self.post('/api/signup', {
+            'first_name': 'Sara', 'last_name': 'Ali', 'dial_code': '+962', 'mobile_number': number,
+            'password': 'StudentPass1', 'password_confirmation': 'StudentPass1',
+            'specialization': 'Nursing', 'governorate': 'Amman', 'birth_date': '2000-01-01', **extra,
+        })
+
+    def test_signup_with_empty_optional_email(self, send_otp):
+        # Two students without an email must not collide on the unique email column.
+        for number in ('791111112', '791111113'):
+            res = self.signup(number, email='')
+            self.assertEqual(res.status_code, 200, res.json())
+        self.assertEqual(User.objects.filter(phone__in=['+962791111112', '+962791111113'], email__isnull=True).count(), 2)
+
+    def test_signup_rejects_taken_phone_and_email(self, send_otp):
+        self.assertEqual(self.signup('791111114', email='sara@example.com').status_code, 200)
+        res = self.signup('791111114', email='other@example.com')
+        self.assertEqual(res.status_code, 422)
+        self.assertIn('phone', res.json()['errors'])
+        res = self.signup('791111115', email='SARA@example.com')
+        self.assertEqual(res.status_code, 422)
+        self.assertIn('email', res.json()['errors'])
+
+
+# Was a second "OtpServiceTests", silently shadowed by the class below so these never ran.
+class UserServiceSignupTests(TestCase):
     def test_signup_creates_user_and_profile(self):
         user, otp = UserService.signup({
             'first_name': 'John',

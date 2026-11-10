@@ -71,14 +71,24 @@ class UserSignupSerializer(serializers.Serializer):
     phone_country_code = serializers.CharField(max_length=10, required=False, allow_blank=True)
     password = serializers.CharField(min_length=8)
     password_confirmation = serializers.CharField(min_length=8)
-    email = serializers.EmailField(required=False, allow_null=True)
+    email = serializers.EmailField(required=False, allow_null=True, allow_blank=True)
     specialization = serializers.CharField(max_length=255)
     governorate = serializers.CharField(max_length=255)
     birth_date = serializers.DateField()
 
+    def validate_email(self, value):
+        # Optional: an empty field means no email. Stored as NULL because the column is unique.
+        if not value:
+            return None
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError('This email is already registered.')
+        return value
+
     def validate(self, data):
         if data.get('password') != data.get('password_confirmation'):
             raise serializers.ValidationError({'password': ['Password confirmation does not match.']})
+        if User.objects.filter(phone=data.get('phone')).exists():
+            raise serializers.ValidationError({'phone': ['This phone number is already registered. Please log in.']})
         return data
 
 

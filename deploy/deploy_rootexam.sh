@@ -2,7 +2,7 @@
 # Deploy the RootExam platform on a shared server.
 # Usage (from your machine): upload the two archives to /tmp, then run this as root:
 #   cd backend; git archive --format=tar -o rootexam-backend.tar HEAD
-#   cd frontend; VITE_API_BASE_URL=/api npm run build; tar -cf rootexam-frontend.tar -C dist .
+#   cd frontend; npm run build; tar -cf rootexam-frontend.tar -C dist .   (production builds use /api)
 #   scp rootexam-*.tar root@SERVER:/tmp/ && ssh root@SERVER 'bash -s' < deploy/deploy_rootexam.sh
 # Only touches rootexam-named resources and
 # /opt/exambackend + /opt/examfrontend; other sites and databases are left alone.
@@ -124,6 +124,15 @@ sleep 3
 systemctl is-active exambackend
 
 echo "== 8. frontend"
+# A build made in Git Bash with VITE_API_BASE_URL=/api gets "C:/Program Files/Git/api" baked in,
+# which breaks every request: refuse it before touching the live site.
+mkdir -p /tmp/rootexam-front-check && tar -xf /tmp/rootexam-frontend.tar -C /tmp/rootexam-front-check
+if grep -rqs "C:/Program Files" /tmp/rootexam-front-check/assets; then
+  rm -rf /tmp/rootexam-front-check
+  echo "frontend build contains a Windows path as API URL: aborting, live site untouched"
+  exit 1
+fi
+rm -rf /tmp/rootexam-front-check
 mkdir -p "$FRONT"
 find "$FRONT" -mindepth 1 -delete
 tar -xf /tmp/rootexam-frontend.tar -C "$FRONT"
@@ -171,6 +180,8 @@ server {
     # React router: every other path is the single-page app.
     location / {
         try_files $uri $uri/ /index.html;
+        # The page names the current bundle, so browsers must revalidate it after every deploy.
+        add_header Cache-Control "no-cache" always;
     }
 }
 EOF
