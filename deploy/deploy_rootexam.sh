@@ -186,13 +186,30 @@ else
   exit 1
 fi
 
-echo "== 10. smoke tests (through nginx, by Host header)"
-curl -s -o /dev/null -w "frontend /           %{http_code}\n" -H "Host: $DOMAIN" http://127.0.0.1/
-curl -s -o /dev/null -w "spa route /exams     %{http_code}\n" -H "Host: $DOMAIN" http://127.0.0.1/exams
-curl -s -o /dev/null -w "api /api/landing     %{http_code}\n" -H "Host: $DOMAIN" http://127.0.0.1/api/landing/index
-curl -s -o /dev/null -w "admin login          %{http_code}\n" -H "Host: $DOMAIN" http://127.0.0.1/system-admin/login/
-curl -s -o /dev/null -w "static admin css     %{http_code}\n" -H "Host: $DOMAIN" http://127.0.0.1/static/admin/css/admin.css
-curl -s -o /dev/null -w "reset w/o token      %{http_code} (expect 422)\n" -H "Host: $DOMAIN" -H "Content-Type: application/json" \
-  -d '{"phone":"+962700000000","password":"x12345678","password_confirmation":"x12345678"}' http://127.0.0.1/api/reset
+echo "== 10. daily database backup (rootexam only, 14 days kept)"
+cat > /usr/local/bin/rootexam-db-backup <<'BACKUP'
+#!/bin/bash
+# Nightly dump of the rootexam database only; other databases on this server are not touched.
+set -euo pipefail
+DIR=/root/backups/rootexam-db
+mkdir -p "$DIR" && chmod 700 "$DIR"
+OUT="$DIR/rootexam-$(date +%Y%m%d-%H%M).sql.gz"
+sudo -u postgres pg_dump --no-owner rootexam | gzip -9 > "$OUT.tmp" && mv "$OUT.tmp" "$OUT"
+find "$DIR" -name 'rootexam-*.sql.gz' -mtime +14 -delete
+BACKUP
+chmod 700 /usr/local/bin/rootexam-db-backup
+echo "15 3 * * * root /usr/local/bin/rootexam-db-backup" > /etc/cron.d/rootexam-db-backup
+chmod 644 /etc/cron.d/rootexam-db-backup
+/usr/local/bin/rootexam-db-backup && ls -la /root/backups/rootexam-db | tail -2
+
+echo "== 11. smoke tests (HTTPS through nginx on this host)"
+R="--resolve $DOMAIN:443:127.0.0.1"
+curl -s $R -o /dev/null -w "frontend /           %{http_code}\n" "https://$DOMAIN/"
+curl -s $R -o /dev/null -w "spa route /login     %{http_code}\n" "https://$DOMAIN/login"
+curl -s $R -o /dev/null -w "api /api/landing     %{http_code}\n" "https://$DOMAIN/api/landing/index"
+curl -s $R -o /dev/null -w "admin login          %{http_code}\n" "https://$DOMAIN/system-admin/login/"
+curl -s $R -o /dev/null -w "static admin css     %{http_code}\n" "https://$DOMAIN/static/admin/css/admin.css"
+curl -s $R -o /dev/null -w "reset w/o token      %{http_code} (expect 422)\n" -H "Content-Type: application/json" \
+  -d '{"phone":"+962700000000","password":"x12345678","password_confirmation":"x12345678"}' "https://$DOMAIN/api/reset"
 rm -f /tmp/rootexam-backend.tar /tmp/rootexam-frontend.tar
 echo "DONE"
