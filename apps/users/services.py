@@ -6,7 +6,6 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 from django.contrib.auth.hashers import check_password, make_password
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.users.models import User, UserProfile, OtpRequest, PasswordResetToken, AuditLog
 
@@ -165,15 +164,6 @@ class UserService:
                 setattr(profile, field, data[field])
         profile.save()
         return user
-
-    @classmethod
-    def get_tokens(cls, user: User):
-        refresh = RefreshToken.for_user(user)
-        return {
-            'token': str(refresh.access_token),
-            'token_expired_at': timezone.now() + refresh.access_token.lifetime,
-            'refresh': str(refresh),
-        }
 
 
 class AuditService:

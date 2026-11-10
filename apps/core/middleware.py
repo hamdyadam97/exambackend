@@ -3,9 +3,12 @@ Core middleware for logging, security, and error handling.
 """
 import logging
 import traceback
-from django.http import JsonResponse
+from django.core.exceptions import BadRequest, PermissionDenied, SuspiciousOperation
+from django.http import Http404, JsonResponse
 
 logger = logging.getLogger('api')
+
+EXPECTED_EXCEPTIONS = (Http404, PermissionDenied, SuspiciousOperation, BadRequest)
 
 
 class ExceptionLoggingMiddleware:
@@ -19,6 +22,9 @@ class ExceptionLoggingMiddleware:
         return response
 
     def process_exception(self, request, exception):
+        # Expected client errors: let Django answer with 404/403/400 instead of logging them as crashes.
+        if isinstance(exception, EXPECTED_EXCEPTIONS):
+            return None
         logger.error(
             'Unhandled exception: %s\n%s',
             str(exception),

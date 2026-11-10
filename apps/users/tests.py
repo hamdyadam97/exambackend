@@ -100,14 +100,48 @@ class LoginApiTests(TestCase):
         self.assertEqual(wrong_phone['statusCode'], 422)
         self.assertIn('WrongCredentials', wrong_phone['errors'])
 
-    def test_successful_login_returns_token_and_user(self):
+    def test_successful_login_sets_httponly_session_cookie(self):
         self._create_user()
         response = self.client.post(self.URL, data=self._payload(), content_type='application/json')
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertTrue(body['status'])
-        self.assertIn('token', body['data'])
+        self.assertTrue(body['data']['authenticated'])
         self.assertEqual(body['data']['user']['phone'], '+962795123456')
+        # The token never reaches JavaScript: not in the body, and its cookie is httpOnly.
+        self.assertNotIn('token', body['data'])
+        self.assertNotIn('refresh', body['data'])
+        cookie = response.cookies['access_token']
+        self.assertTrue(cookie['httponly'])
+        self.assertEqual(cookie['samesite'], 'Strict')
+        self.assertFalse(response.cookies['logged_in']['httponly'])
+
+    def test_cookie_session_reads_and_requires_header_to_write(self):
+        self._create_user()
+        self.client.post(self.URL, data=self._payload(), content_type='application/json')
+        self.assertEqual(self.client.get('/api/get-user-info').status_code, 200)
+        # Without X-Requested-With a cross-site form could ride the cookie, so the write is not signed in.
+        self.assertEqual(self.client.post('/api/update-user-info', {'first_name': 'X'}, content_type='application/json').status_code, 401)
+        res = self.client.post(
+            '/api/update-user-info', {'first_name': 'X'}, content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(res.status_code, 200)
+
+    def test_logout_clears_the_session(self):
+        self._create_user()
+        self.client.post(self.URL, data=self._payload(), content_type='application/json')
+        res = self.client.post('/api/logout', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.cookies['access_token'].value, '')
+        self.assertEqual(self.client.get('/api/get-user-info').status_code, 401)
+
+    def test_stale_cookie_does_not_block_login(self):
+        self._create_user()
+        self.client.cookies['access_token'] = 'expired-or-forged'
+        self.assertEqual(self.client.get('/api/get-user-info').status_code, 401)
+        response = self.client.post(self.URL, data=self._payload(), content_type='application/json')
+        self.assertEqual(response.status_code, 200)
 
     def test_unverified_phone_redirects_to_otp_verification(self):
         self._create_user(verified=False)
@@ -231,7 +265,8 @@ class AuthFlowSecurityTests(TestCase):
         phone = res.json()['data']['user']['phone']
         res = self.post('/api/verify-otp', {'mobile': phone, 'otp': self.last_otp(send_otp)})
         self.assertEqual(res.status_code, 200, res.json())
-        self.assertIn('token', res.json()['data'])
+        self.assertTrue(res.json()['data']['authenticated'])
+        self.assertTrue(res.cookies['access_token']['httponly'])
         self.assertTrue(User.objects.get(phone=phone).is_phone_verified)
 
 

@@ -8,7 +8,7 @@ from django.db.models.functions import TruncDate
 from django.utils import timezone
 
 from apps.content.models import QuestionsTopic
-from apps.exams.models import Exam, ExamTrialDetail, UserExam
+from apps.exams.models import ExamTrialDetail
 
 PASS_SCORE = 50  # Same threshold the admin dashboard uses for its pass rate.
 STRONG_ACCURACY = 75
@@ -110,14 +110,6 @@ def student_insights(user):
         answered_count=Count('details', filter=Q(details__answer__isnull=False)),
     ).order_by('-updated_at').first()
 
-    taken_exam_ids = UserExam.objects.filter(user=user).values_list('exam_id', flat=True)
-    recommended_exams = [
-        {'id': exam.id, 'title': exam.title, 'duration_minutes': exam.duration_minutes, 'category': exam.category.name if exam.category else None}
-        for exam in Exam.objects.filter(
-            status=Exam.ACTIVE, deleted_at__isnull=True, category_id__in=subscribed_ids,
-        ).exclude(id__in=taken_exam_ids).select_related('category').order_by('-is_featured', 'order', '-created_at')[:3]
-    ]
-
     current_sub = user.active_subscriptions().select_related('package').order_by('end_date').first()
     subscribed_package_ids = user.active_subscriptions().values_list('package_id', flat=True)
     offers = [
@@ -157,7 +149,6 @@ def student_insights(user):
             'answered': in_progress.answered_count,
             'total': in_progress.question_count,
         } if in_progress else None,
-        'recommended_exams': recommended_exams,
         'subscription': UserPackageResource(current_sub).data if current_sub else None,
         'offers': offers,
     }

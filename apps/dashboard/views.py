@@ -1,5 +1,5 @@
 from datetime import timedelta
-from django.db.models import Count, Sum, Q
+from django.db.models import Count, F, Sum, Q
 from django.db.models.functions import TruncDate
 from django import forms
 from django.forms import modelform_factory
@@ -18,7 +18,7 @@ from django.contrib.auth.mixins import UserPassesTestMixin
 
 from apps.users.models import User
 from apps.content.models import Category, Blog, Testimonial, SupportRequest
-from apps.exams.models import Question, ExamTrail, UserExam
+from apps.exams.models import Question, ExamTrail
 from apps.packages.models import Package, UserPackage
 from apps.payments.models import PaymentTransaction, Invoice
 
@@ -108,13 +108,11 @@ class DashboardView(TemplateView):
         return ctx
 
     def _compute_pass_rate(self):
-        total = UserExam.objects.filter(status__in=[UserExam.STATUS_SUBMITTED]).count()
+        completed = ExamTrail.objects.filter(status='completed', total_questions__gt=0)
+        total = completed.count()
         if not total:
             return 0
-        passed = UserExam.objects.filter(
-            status=UserExam.STATUS_SUBMITTED,
-            score__gte=50,
-        ).count()
+        passed = completed.filter(correct_answers__gte=F('total_questions') / 2.0).count()
         return round((passed / total) * 100, 1)
 
 
@@ -180,10 +178,11 @@ class ReportsView(TemplateView):
         return ctx
 
     def _pass_rate(self):
-        total = UserExam.objects.filter(status=UserExam.STATUS_SUBMITTED).count()
+        completed = ExamTrail.objects.filter(status='completed', total_questions__gt=0)
+        total = completed.count()
         if not total:
             return 0
-        passed = UserExam.objects.filter(status=UserExam.STATUS_SUBMITTED, score__gte=50).count()
+        passed = completed.filter(correct_answers__gte=F('total_questions') / 2.0).count()
         return round((passed / total) * 100, 1)
 
 

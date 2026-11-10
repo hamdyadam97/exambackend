@@ -2,23 +2,22 @@
 Exam API views.
 """
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.db.models import Count, Max, Q
-from django.utils import timezone
 from django.utils.html import strip_tags
 from django.utils.text import Truncator
 from apps.exams.models import (
-    Question, Answer, Exam, ExamTrail, ExamTrialDetail, SavedQuestion, UserExam, exam_classification_q,
+    Question, Answer, ExamTrail, ExamTrialDetail, SavedQuestion, exam_classification_q,
 )
 from apps.exams.serializers import (
-    QuestionResource, ExamResource, ExamDetailResource, ExamTrialResource, ExamTrialIndexResource,
+    QuestionResource, ExamTrialResource, ExamTrialIndexResource,
     ExamTrialDetailResource, ShowExamTrialResource, ExamStoreSerializer,
     StoreQuestionAnswerSerializer, StoreSingleQuestionAnswerSerializer,
 )
-from apps.content.models import Category, ExamSection, QuestionsTopic, Faq, Testimonial
+from apps.content.models import Category, ExamSection, QuestionsTopic
 from apps.content.serializers import (
-    CategoryResource, SectionResource, TopicResource, FaqResource, TestimonialResource,
+    CategoryResource, SectionResource, TopicResource,
 )
 from apps.core.utils import api_response, send_response, send_error, api_get, api_post
 from apps.content.models import Setting
@@ -42,125 +41,6 @@ def reject_if_closed(trail):
         trail.finish()
         return send_error('Time is up', {'TimeUp': ['The time for this exam has ended']}, 409)
     return None
-
-
-class ExamsPageView(BaseApiView):
-    permission_classes = [AllowAny]
-
-    @api_get('ExamsPage')
-    def get(self, request):
-        exams = Exam.objects.filter(status=Exam.ACTIVE, deleted_at__isnull=True)
-        featured = exams.filter(is_featured=True).order_by('order', '-created_at')[:6]
-        all_exams = exams.order_by('order', '-created_at')
-        categories = Category.objects.filter(status=Category.ACTIVE, level=Category.LEVEL_CATEGORY).annotate(
-            exams_count=Count('exams', filter=Q(exams__status=Exam.ACTIVE, exams__deleted_at__isnull=True))
-        ).order_by('name')
-        faqs = Faq.objects.filter(status=Faq.ACTIVE).order_by('order', '-created_at')[:10]
-        testimonials = Testimonial.objects.filter(status=Testimonial.APPROVED).order_by('-created_at')[:10]
-
-        stats = exams.aggregate(
-            total_exams=Count('id'),
-            total_questions=Count('exam_questions', filter=Q(exam_questions__deleted_at__isnull=True)),
-        )
-
-        data = {
-            'featured': ExamResource(featured, many=True, context={'request': request}).data,
-            'exams': ExamResource(all_exams, many=True, context={'request': request}).data,
-            'categories': CategoryResource(categories, many=True, context={'request': request}).data,
-            'faqs': FaqResource(faqs, many=True).data,
-            'testimonials': TestimonialResource(testimonials, many=True).data,
-            'stats': {
-                'total_exams': stats['total_exams'] or 0,
-                'total_questions': stats['total_questions'] or 0,
-                'total_attempts': UserExam.objects.count(),
-            },
-        }
-
-        if request.user and request.user.is_authenticated:
-            user_exams = UserExam.objects.filter(user=request.user, deleted_at__isnull=True).select_related('exam')
-            data['upcoming'] = ExamResource(
-                [ue.exam for ue in user_exams.filter(status__in=[UserExam.STATUS_NEW, UserExam.STATUS_IN_PROGRESS])],
-                many=True, context={'request': request}
-            ).data
-            data['completed'] = ExamResource(
-                [ue.exam for ue in user_exams.filter(status=UserExam.STATUS_SUBMITTED)],
-                many=True, context={'request': request}
-            ).data
-
-        return api_response(True, 'Fetched Successfully', data)
-
-
-class ExamDetailPageView(BaseApiView):
-    permission_classes = [AllowAny]
-
-    @api_get('ExamDetailPage')
-    def get(self, request, pk):
-        try:
-            exam = Exam.objects.get(pk=pk, status=Exam.ACTIVE, deleted_at__isnull=True)
-        except Exam.DoesNotExist:
-            return send_error('Exam not found', {'ExamNotFound': ['No exam found for given id']})
-
-        faqs = Faq.objects.filter(status=Faq.ACTIVE).order_by('order', '-created_at')[:10]
-
-        data = {
-            'exam': ExamDetailResource(exam, context={'request': request}).data,
-            'faqs': FaqResource(faqs, many=True).data,
-        }
-        return api_response(True, 'Fetched Successfully', data)
-
-
-class ExamStartView(BaseApiView):
-    """Start (or resume) an attempt at a ready-made exam and return the trail to play."""
-    permission_classes = [IsAuthenticated]
-
-    @api_post('ExamStart')
-    def post(self, request, pk):
-        try:
-            exam = Exam.objects.get(pk=pk, status=Exam.ACTIVE, deleted_at__isnull=True)
-        except Exam.DoesNotExist:
-            return send_error('Exam not found', {'ExamNotFound': ['No exam found for given id']})
-
-        user = request.user
-        if exam.category_id and not user.active_subscriptions().filter(
-            package__category_id=exam.category_id
-        ).exists():
-            return send_error(
-                'Subscription required',
-                {'SubscriptionRequired': ['Subscribe to a package for this specialty to take this exam']},
-                403,
-            )
-
-        in_progress = ExamTrail.objects.filter(
-            user=user, user_exam__exam=exam, user_exam__status=UserExam.STATUS_IN_PROGRESS,
-        ).exclude(status='completed').order_by('-created_at').first()
-        if in_progress:
-            if not in_progress.is_expired():
-                return api_response(True, 'Resumed', {'exam_id': in_progress.id, 'resumed': True})
-            # The time ran out while the student was away: that attempt counts as submitted.
-            in_progress.finish()
-
-        attempts_used = UserExam.objects.filter(
-            user=user, exam=exam, status=UserExam.STATUS_SUBMITTED, deleted_at__isnull=True,
-        ).count()
-        if exam.attempts_allowed and attempts_used >= exam.attempts_allowed:
-            return send_error(
-                'No attempts left',
-                {'AttemptsExhausted': [f'You have used all {exam.attempts_allowed} attempt(s) for this exam']},
-                403,
-            )
-
-        try:
-            with transaction.atomic():
-                user_exam = UserExam.objects.create(
-                    user=user, exam=exam,
-                    status=UserExam.STATUS_IN_PROGRESS,
-                    start_date=timezone.now().date(),
-                )
-                trail = ExamTrail.start_from_exam(user, exam, user_exam)
-        except ValueError as e:
-            return send_error(str(e), {'ExamEmpty': [str(e)]}, 422)
-
-        return api_response(True, 'Started', {'exam_id': trail.id, 'resumed': False})
 
 
 class StudentInsightsView(BaseApiView):
@@ -993,15 +873,4 @@ class ExamFinishView(BaseApiView):
             'total_questions': exam.total_questions,
             'correct_answers': exam.correct_answers,
             'wrong_answers': exam.wrong_answers,
-        })
-
-
-class LegacyExamListView(BaseApiView):
-    permission_classes = [AllowAny]
-
-    @api_get('LegacyExamList')
-    def get(self, request):
-        exams = Exam.objects.filter(status=1).order_by('-created_at')
-        return api_response(True, 'Fetched Successfully', {
-            'exams': [{'id': e.id, 'title': e.title, 'description': e.description, 'score': e.score} for e in exams],
         })

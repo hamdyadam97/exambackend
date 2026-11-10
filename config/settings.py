@@ -151,7 +151,7 @@ LOGIN_REDIRECT_URL = '/admin/'
 # DRF
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.core.auth.CookieJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -174,6 +174,8 @@ SIMPLE_JWT = {
 # CORS
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
+# The session lives in a cookie, so the dev frontend (another port) must send credentials.
+CORS_ALLOW_CREDENTIALS = True
 
 # Swagger / Spectacular
 SPECTACULAR_SETTINGS = {

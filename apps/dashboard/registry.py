@@ -5,8 +5,7 @@ from apps.content.models import (
     SupportRequest, AiInstruction, Setting,
 )
 from apps.exams.models import (
-    Question, Answer, QuestionTopic, ExamSectionLink, Exam,
-    ExamQuestion, UserExam, UserExamAnswer, UserExamTrial,
+    Question, Answer, QuestionTopic, ExamSectionLink,
     ExamTrail, ExamTrialDetail,
     ExamTrailCategoryLink, ExamTrailSubCategoryLink,
     ExamTrailSubSubCategoryLink, ExamTrailSectionLink, ExamTrailTopicLink,

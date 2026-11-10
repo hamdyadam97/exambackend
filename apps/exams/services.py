@@ -3,7 +3,7 @@ Exam domain services.
 """
 from django.db import transaction
 from django.db.models import Q
-from apps.exams.models import ExamTrail, ExamTrialDetail, Question, UserExam, UserExamAnswer
+from apps.exams.models import ExamTrail, ExamTrialDetail, Question
 from apps.users.services import AuditService
 
 
@@ -55,44 +55,3 @@ class ExamTrailService:
         trail.correct_answers = correct
         trail.wrong_answers = total - correct
         trail.save(update_fields=['total_questions', 'correct_answers', 'wrong_answers', 'status'])
-
-
-class ExamService:
-    """Handles regular exam attempts."""
-
-    @classmethod
-    def start_exam(cls, user, exam_id):
-        user_exam, _ = UserExam.objects.get_or_create(
-            user=user,
-            exam_id=exam_id,
-            defaults={'status': UserExam.STATUS_IN_PROGRESS},
-        )
-        return user_exam
-
-    @classmethod
-    def submit_answer(cls, user_exam: UserExam, question_id: int, answer_text: str):
-        question = Question.objects.get(pk=question_id)
-        correct_answer = question.correct_answer
-        is_correct = correct_answer and str(correct_answer.id) == answer_text
-        UserExamAnswer.objects.update_or_create(
-            user_exam=user_exam,
-            question_id=question_id,
-            defaults={
-                'user': user_exam.user,
-                'exam': user_exam.exam,
-                'answer': answer_text,
-                'is_correct': is_correct,
-            }
-        )
-        return is_correct
-
-    @classmethod
-    def finish_exam(cls, user_exam: UserExam):
-        answers = user_exam.answers.all()
-        correct = answers.filter(is_correct=True).count()
-        total = answers.count()
-        user_exam.correct_answers = correct
-        user_exam.wrong_answers = total - correct
-        user_exam.status = UserExam.STATUS_SUBMITTED
-        user_exam.save()
-        return user_exam

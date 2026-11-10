@@ -5,7 +5,6 @@ import logging
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework_simplejwt.tokens import RefreshToken
 from django.db import transaction
 from django.utils import timezone
 from django.contrib.auth.hashers import check_password, make_password
@@ -17,6 +16,7 @@ from apps.users.serializers import (
 )
 from apps.core.utils import api_response, send_response, send_error, api_get, api_post, rearrange_tele_input_data
 from apps.users.services import OtpService, PasswordResetService
+from apps.core.auth import login_response, logout_response, session_payload
 from apps.users.throttling import client_ip, is_throttled, register_failed_attempt, clear_attempts
 
 logger = logging.getLogger('api')
@@ -73,13 +73,13 @@ def _verify_otp_request(request):
     return user, None
 
 
-def get_tokens_for_user(user):
-    refresh = RefreshToken.for_user(user)
-    return {
-        'token': str(refresh.access_token),
-        'token_expired_at': timezone.now() + refresh.access_token.lifetime,
-        'refresh': str(refresh),
-    }
+def signed_in_response(request, message, user):
+    """Success response that starts a session: the token is set as an httpOnly cookie, never in the body."""
+    response = send_response(message, {
+        **session_payload(user),
+        'user': UserResource(user, context={'request': request}).data,
+    })
+    return login_response(response, user)
 
 
 class SignupView(BaseApiView):
@@ -133,11 +133,7 @@ class VerifyOtpView(BaseApiView):
         user.save(update_fields=['is_phone_verified'])
 
         user.make_trial_subscription()
-        tokens = get_tokens_for_user(user)
-        return send_response('OTP Verification Successfully', {
-            **tokens,
-            'user': UserResource(user, context={'request': request}).data,
-        })
+        return signed_in_response(request, 'OTP Verification Successfully', user)
 
 
 class ResendOtpView(BaseApiView):
@@ -239,11 +235,7 @@ class LoginView(BaseApiView):
                 'go_to_verify': True,
             })
 
-        tokens = get_tokens_for_user(user)
-        return send_response('Login Successfully', {
-            **tokens,
-            'user': UserResource(user, context={'request': request}).data,
-        })
+        return signed_in_response(request, 'Login Successfully', user)
 
 
 class ForgetPasswordView(BaseApiView):
@@ -303,11 +295,7 @@ class ResetPasswordView(BaseApiView):
         user.set_password(serializer.validated_data['password'])
         user.save(update_fields=['password'])
 
-        tokens = get_tokens_for_user(user)
-        return send_response('Reset Password Done Successfully', {
-            **tokens,
-            'user': UserResource(user, context={'request': request}).data,
-        })
+        return signed_in_response(request, 'Reset Password Done Successfully', user)
 
 
 class GetUserInfoView(BaseApiView):
@@ -364,8 +352,9 @@ class UpdateUserPasswordView(BaseApiView):
 
 
 class LogoutView(BaseApiView):
-    permission_classes = [IsAuthenticated]
+    # Open to everyone so an expired session can still clear its cookies.
+    permission_classes = [AllowAny]
 
     @api_post('Logout')
     def post(self, request):
-        return send_response('Logout Successfully', {})
+        return logout_response(send_response('Logout Successfully', {}))

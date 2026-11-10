@@ -20,7 +20,7 @@ class RootsExamsAdminSite(AdminSite):
         # Local imports to avoid circular imports during app startup
         from apps.users.models import User
         from apps.content.models import Category, Blog, Testimonial
-        from apps.exams.models import Question, Exam, ExamTrail
+        from apps.exams.models import Question, ExamTrail
         from apps.packages.models import Package, UserPackage
         from apps.payments.models import PaymentTransaction, Invoice
 
@@ -34,7 +34,7 @@ class RootsExamsAdminSite(AdminSite):
             'blogs': Blog.objects.count(),
             'testimonials': Testimonial.objects.count(),
             'questions': Question.objects.count(),
-            'exams': Exam.objects.count(),
+            'exams': ExamTrail.objects.count(),
             'exam_trails': ExamTrail.objects.count(),
             'packages': Package.objects.count(),
             'subscriptions': UserPackage.objects.count(),

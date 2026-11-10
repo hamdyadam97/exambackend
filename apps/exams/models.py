@@ -764,45 +764,6 @@ class ExamTrail(models.Model):
             user_exam.end_date = timezone.now().date()
             user_exam.save()
 
-    @classmethod
-    def start_from_exam(cls, user, exam, user_exam):
-        """Create a trail that replays a ready-made Exam's question list."""
-        question_ids = list(
-            exam.exam_questions.filter(
-                deleted_at__isnull=True,
-                question__status=Question.ACTIVE,
-                question__deleted_at__isnull=True,
-            ).order_by('order', 'id').values_list('question_id', flat=True)
-        )
-        if not question_ids:
-            raise ValueError('This exam has no questions yet.')
-        if exam.has_random_questions:
-            random.shuffle(question_ids)
-
-        trail = cls.objects.create(
-            user=user,
-            title=exam.title or 'Exam',
-            mode=cls.MODE_EXAM,
-            question_mode=cls.QUESTION_MODE_ALL,
-            is_timed_mode=exam.has_timer,
-            duration_minutes=exam.duration_minutes if exam.has_timer else None,
-            question_count=len(question_ids),
-            user_exam=user_exam,
-        )
-        if exam.category_id:
-            trail.categories.set([exam.category_id])
-        if exam.sub_category_id:
-            trail.sub_categories.set([exam.sub_category_id])
-        if exam.sub_sub_category_id:
-            trail.sub_sub_categories.set([exam.sub_sub_category_id])
-        trail.generate_stages()
-        trail.save()
-        # Details are read back ordered by id, so bulk_create keeps the exam's order.
-        ExamTrialDetail.objects.bulk_create(
-            [ExamTrialDetail(exam_trail=trail, question_id=qid) for qid in question_ids]
-        )
-        return trail
-
     def get_current_stage_questions(self):
         all_ids = list(self.details.order_by('id').values_list('question_id', flat=True))
         stages = self.stages or []

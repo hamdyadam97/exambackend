@@ -7,41 +7,9 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from apps.users.models import User
 from apps.content.models import Category
-from apps.exams.models import Question, Answer, Exam, ExamQuestion, ExamTrail, UserExam
-from apps.exams.services import ExamService, ExamTrailService
+from apps.exams.models import Question, Answer, ExamTrail
+from apps.exams.services import ExamTrailService
 from apps.packages.models import Package, UserPackage
-
-
-class ExamServiceTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(phone='962791234567', password='pass')
-        self.category = Category.objects.create(name='Test Category')
-        self.exam = Exam.objects.create(title='Test Exam', category=self.category)
-        self.question = Question.objects.create(
-            text_question='What is 2+2?',
-            category=self.category,
-            answer_type=1,
-        )
-        self.correct = Answer.objects.create(question=self.question, answer_option='4')
-        self.question.correct_answer = self.correct
-        self.question.save()
-        ExamQuestion.objects.create(exam=self.exam, question=self.question, order=1)
-
-    def test_start_exam(self):
-        user_exam = ExamService.start_exam(self.user, self.exam.id)
-        self.assertEqual(user_exam.status, user_exam.STATUS_IN_PROGRESS)
-
-    def test_submit_correct_answer(self):
-        user_exam = ExamService.start_exam(self.user, self.exam.id)
-        is_correct = ExamService.submit_answer(user_exam, self.question.id, str(self.correct.id))
-        self.assertTrue(is_correct)
-
-    def test_finish_exam(self):
-        user_exam = ExamService.start_exam(self.user, self.exam.id)
-        ExamService.submit_answer(user_exam, self.question.id, str(self.correct.id))
-        user_exam = ExamService.finish_exam(user_exam)
-        self.assertEqual(user_exam.status, user_exam.STATUS_SUBMITTED)
-        self.assertEqual(user_exam.correct_answers, 1)
 
 
 class ExamTrailServiceTests(TestCase):
@@ -71,87 +39,6 @@ class ExamTrailServiceTests(TestCase):
         self.assertTrue(detail.is_correct)
         trail.refresh_from_db()
         self.assertEqual(trail.correct_answers, 1)
-
-
-class ExamStartApiTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(phone='962791234567', password='pass')
-        self.client = APIClient()
-        self.client.force_authenticate(self.user)
-        self.category = Category.objects.create(name='Nursing')
-        self.exam = Exam.objects.create(
-            title='Nursing Mock', category=self.category, status=Exam.ACTIVE,
-            attempts_allowed=1, duration_minutes=30, has_random_questions=False,
-        )
-        self.questions = []
-        for i in range(3):
-            q = Question.objects.create(text_question=f'Q{i}', category=self.category, status=1)
-            ExamQuestion.objects.create(exam=self.exam, question=q, order=i)
-            self.questions.append(q)
-        self.package = Package.objects.create(name='Nursing Package', category=self.category)
-
-    def subscribe(self):
-        UserPackage.objects.create(
-            user=self.user, package=self.package,
-            start_date=timezone.now().date(),
-            end_date=timezone.now().date() + timedelta(days=30),
-        )
-
-    def start(self):
-        return self.client.post(f'/api/exams/{self.exam.id}/start')
-
-    def test_requires_subscription(self):
-        res = self.start()
-        self.assertEqual(res.status_code, 403)
-        self.assertIn('SubscriptionRequired', res.json()['errors'])
-
-    def test_expired_subscription_is_rejected(self):
-        UserPackage.objects.create(
-            user=self.user, package=self.package,
-            end_date=timezone.now().date() - timedelta(days=1),
-        )
-        self.assertEqual(self.start().status_code, 403)
-
-    def test_start_creates_trail_with_exam_questions_in_order(self):
-        self.subscribe()
-        res = self.start()
-        self.assertEqual(res.status_code, 200)
-        trail = ExamTrail.objects.get(pk=res.json()['data']['exam_id'])
-        self.assertEqual(trail.mode, ExamTrail.MODE_EXAM)
-        self.assertEqual(trail.duration_minutes, 30)
-        self.assertEqual(
-            list(trail.details.order_by('id').values_list('question_id', flat=True)),
-            [q.id for q in self.questions],
-        )
-        self.assertEqual(trail.user_exam.status, UserExam.STATUS_IN_PROGRESS)
-
-    def test_second_start_resumes_unfinished_attempt(self):
-        self.subscribe()
-        first = self.start().json()['data']['exam_id']
-        res = self.start().json()['data']
-        self.assertEqual(res['exam_id'], first)
-        self.assertTrue(res['resumed'])
-        self.assertEqual(UserExam.objects.filter(user=self.user, exam=self.exam).count(), 1)
-
-    def test_finish_scores_attempt_and_enforces_attempt_limit(self):
-        self.subscribe()
-        trail_id = self.start().json()['data']['exam_id']
-        trail = ExamTrail.objects.get(pk=trail_id)
-        trail.details.filter(question=self.questions[0]).update(is_correct=True)
-        self.assertEqual(self.client.post(f'/api/exams/{trail_id}/finish').status_code, 200)
-
-        user_exam = UserExam.objects.get(user=self.user, exam=self.exam)
-        self.assertEqual(user_exam.status, UserExam.STATUS_SUBMITTED)
-        self.assertEqual(user_exam.score, 33)
-
-        res = self.start()
-        self.assertEqual(res.status_code, 403)
-        self.assertIn('AttemptsExhausted', res.json()['errors'])
-
-    def test_exam_without_questions(self):
-        self.subscribe()
-        ExamQuestion.objects.all().delete()
-        self.assertEqual(self.start().status_code, 422)
 
 
 class AnswerIntegrityTests(TestCase):
@@ -354,19 +241,32 @@ class DifficultyFilterTests(TestCase):
         self.assertFalse(res.json()['status'])
 
 
-class ExamTimeLimitTests(ExamStartApiTests):
-    """Reuses the start-exam fixture: a 30-minute exam with 3 questions and attempts_allowed=1."""
+class ExamTimeLimitTests(TestCase):
+    """A timed 30-minute exam with 3 questions, built by the student."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(phone='962791234567', password='pass')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.category = Category.objects.create(name='Nursing')
+        self.questions = [
+            Question.objects.create(text_question=f'Q{i}', category=self.category, status=1) for i in range(3)
+        ]
 
     def start_trail(self, minutes_ago=0):
-        self.subscribe()
-        trail_id = self.start().json()['data']['exam_id']
+        res = self.client.post('/api/exams/store', {
+            'exam_mode': 'exam', 'is_timed_mode': True, 'duration_minutes': 30,
+            'question_count': 3, 'categories': [self.category.id],
+        }, format='json')
+        trail_id = res.json()['data']['exam_id']
         ExamTrail.objects.filter(pk=trail_id).update(created_at=timezone.now() - timedelta(minutes=minutes_ago))
         return trail_id
 
     def answer(self, trail_id):
+        question_id = ExamTrail.objects.get(pk=trail_id).details.order_by('id').first().question_id
         return self.client.post(
             f'/api/exams/{trail_id}/store-single-question-answer',
-            {'question_id': self.questions[0].id, 'answer_id': None, 'is_correct': True},
+            {'question_id': question_id, 'answer_id': None, 'is_correct': True},
             format='json',
         )
 
@@ -385,7 +285,6 @@ class ExamTimeLimitTests(ExamStartApiTests):
         self.assertEqual(res.status_code, 409)
         self.assertIn('TimeUp', res.json()['errors'])
         self.assertEqual(ExamTrail.objects.get(pk=trail_id).status, 'completed')
-        self.assertEqual(UserExam.objects.get(user=self.user).status, UserExam.STATUS_SUBMITTED)
 
     def test_answer_after_finishing_is_rejected(self):
         trail_id = self.start_trail()
@@ -400,14 +299,6 @@ class ExamTimeLimitTests(ExamStartApiTests):
         self.assertEqual(exam['status'], 'completed')
         self.assertEqual(exam['remaining_seconds'], 0)
 
-    def test_expired_attempt_is_not_resumed(self):
-        self.exam.attempts_allowed = 2
-        self.exam.save()
-        expired_id = self.start_trail(minutes_ago=31)
-        res = self.start().json()['data']
-        self.assertNotEqual(res['exam_id'], expired_id)
-        self.assertFalse(res['resumed'])
-
     def test_custom_exam_keeps_chosen_duration(self):
         res = self.client.post('/api/exams/store', {
             'exam_mode': 'exam', 'is_timed_mode': True, 'duration_minutes': 45,
@@ -415,6 +306,10 @@ class ExamTimeLimitTests(ExamStartApiTests):
         }, format='json')
         self.assertEqual(res.status_code, 200)
         self.assertEqual(ExamTrail.objects.get(pk=res.json()['data']['exam_id']).duration_minutes, 45)
+
+    def test_ready_made_exam_endpoints_are_gone(self):
+        self.assertEqual(self.client.get('/api/exams').status_code, 404)
+        self.assertEqual(self.client.post('/api/exams/1/start').status_code, 404)
 
 
 class StudentInsightsApiTests(TestCase):

@@ -4,8 +4,7 @@ Exam and question serializers.
 from rest_framework import serializers
 from apps.exams.models import (
     Question, Answer, QuestionTopic, ExamSectionLink,
-    Exam, ExamQuestion, UserExam, UserExamAnswer,
-    UserExamTrial, ExamTrail, ExamTrialDetail,
+    ExamTrail, ExamTrialDetail,
 )
 from apps.content.serializers import (
     CategoryResource, SectionResource, TopicResource, FaqResource,
@@ -73,80 +72,6 @@ class QuestionResource(serializers.ModelSerializer):
         if obj.answer_has_image and obj.answer_image and request:
             return build_asset_url(request, 'answer_images', obj.answer_image)
         return None
-
-
-class ExamResource(serializers.ModelSerializer):
-    category = CategoryResource(read_only=True)
-    sub_category = CategoryResource(read_only=True)
-    sub_sub_category = CategoryResource(read_only=True)
-    questions_count = serializers.SerializerMethodField()
-    difficulty_label = serializers.CharField(source='get_difficulty_level_display', read_only=True)
-
-    class Meta:
-        model = Exam
-        fields = [
-            'id', 'title', 'description', 'icon', 'duration_minutes', 'score',
-            'difficulty_level', 'difficulty_label', 'attempts_allowed',
-            'is_featured', 'status', 'order',
-            'category', 'sub_category', 'sub_sub_category',
-            'questions_count', 'created_at', 'updated_at',
-        ]
-
-    def get_questions_count(self, obj):
-        return obj.exam_questions.filter(deleted_at__isnull=True).count()
-
-
-class ExamDetailResource(serializers.ModelSerializer):
-    category = CategoryResource(read_only=True)
-    sub_category = CategoryResource(read_only=True)
-    sub_sub_category = CategoryResource(read_only=True)
-    questions_count = serializers.SerializerMethodField()
-    difficulty_label = serializers.CharField(source='get_difficulty_level_display', read_only=True)
-    exam_type_label = serializers.CharField(source='get_exam_type_display', read_only=True)
-    related_exams = serializers.SerializerMethodField()
-    features = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Exam
-        fields = [
-            'id', 'title', 'description', 'icon', 'duration_minutes', 'score',
-            'difficulty_level', 'difficulty_label', 'attempts_allowed',
-            'is_featured', 'status', 'order',
-            'language', 'exam_type', 'exam_type_label',
-            'what_youll_be_tested_on', 'skills_covered', 'instructions',
-            'requirements', 'rules_policies',
-            'has_instant_result', 'has_auto_save', 'has_timer',
-            'has_random_questions', 'has_progress_tracking', 'features',
-            'category', 'sub_category', 'sub_sub_category',
-            'questions_count', 'related_exams',
-            'created_at', 'updated_at',
-        ]
-
-    def get_questions_count(self, obj):
-        return obj.exam_questions.filter(deleted_at__isnull=True).count()
-
-    def get_related_exams(self, obj):
-        related = Exam.objects.filter(
-            status=Exam.ACTIVE, deleted_at__isnull=True
-        ).exclude(id=obj.id)
-        if obj.category_id:
-            related = related.filter(category_id=obj.category_id)
-        return ExamResource(related.order_by('order', '-created_at')[:6], many=True, context=self.context).data
-
-    def get_features(self, obj):
-        return [
-            {'key': 'instant_result', 'label': 'Instant result', 'enabled': obj.has_instant_result},
-            {'key': 'auto_save', 'label': 'Auto save', 'enabled': obj.has_auto_save},
-            {'key': 'timer', 'label': 'Timer', 'enabled': obj.has_timer},
-            {'key': 'random_questions', 'label': 'Random questions', 'enabled': obj.has_random_questions},
-            {'key': 'progress_tracking', 'label': 'Progress tracking', 'enabled': obj.has_progress_tracking},
-        ]
-
-
-class UserExamResource(serializers.ModelSerializer):
-    class Meta:
-        model = UserExam
-        fields = '__all__'
 
 
 class ExamTrialDetailResource(serializers.ModelSerializer):

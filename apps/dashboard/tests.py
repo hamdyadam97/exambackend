@@ -29,6 +29,12 @@ class DashboardAccessTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'RootsExams')
 
+    def test_removed_exam_sections_are_404_without_error_logs(self):
+        self.client.login(phone='+962790000001', password='admin123')
+        with self.assertNoLogs('api', level='ERROR'):
+            for url in ('/admin/exams/', '/admin/exams/create/', '/admin/user_exams/', '/admin/no-such-section/'):
+                self.assertEqual(self.client.get(url).status_code, 404, url)
+
     def test_list_view_loads(self):
         self.client.login(phone='+962790000001', password='admin123')
         response = self.client.get('/admin/users/')

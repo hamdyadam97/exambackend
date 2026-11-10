@@ -14,13 +14,13 @@ from apps.content.views import (
     SupportView, ChatView, QuestionBanksView, PaymentTypesView, UserNotificationsView,
 )
 from apps.exams.views import (
-    LegacyExamListView, ExamListView, ExamDetailView, ExamCreateView,
+    ExamListView, ExamDetailView, ExamCreateView,
     ExamSubCategoriesView, ExamSubSubCategoriesView, ExamSectionsView,
     ExamTopicsView, ExamRefreshView, ExamStoreView, ExamResetView,
     ExamQuestionsView, ExamQuestionDetailView, ExamCurrentStageView,
     ExamAdvanceStageView, ExamStageView, ExamStoreQuestionAnswerView,
     ExamStoreSingleQuestionAnswerView, ExamOverviewView, ExamFinishView,
-    ExamsPageView, ExamDetailPageView, ExamStartView, StudentInsightsView,
+    StudentInsightsView,
     ExamQuestionStateView, SavedQuestionView, QuestionCollectionView,
 )
 from apps.packages.views import (
@@ -72,14 +72,6 @@ urlpatterns = [
     path('get-subcategories/<int:pk>', SubCategoriesForCategoryView.as_view(), name='get-subcategories'),
     path('get-subcategory', GetSubcategoryView.as_view(), name='get-subcategory'),
     path('subcategories/<int:pk>/packages', SubCategoryPackagesView.as_view(), name='subcategory-packages'),
-
-    # Public exams page
-    path('exams', ExamsPageView.as_view(), name='exams-page'),
-    path('exams/<int:pk>', ExamDetailPageView.as_view(), name='exam-detail-page'),
-    path('exams/<int:pk>/start', ExamStartView.as_view(), name='exam-start'),
-
-    # Legacy exams
-    path('get-exams', LegacyExamListView.as_view(), name='get-exams'),
 
     # Exam trails
     path('exams/get', ExamListView.as_view(), name='exam-list'),
