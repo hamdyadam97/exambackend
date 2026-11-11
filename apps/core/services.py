@@ -26,7 +26,7 @@ class SmsService:
                         'type': 4,
                         'text': message,
                     },
-                    timeout=30,
+                    timeout=(8, 20),  # connect, read: an unreachable gateway must not hold the signup for long
                 )
                 logger.info('OTP SMS response %s: %s', response.status_code, response.text[:200])
                 return response.ok
