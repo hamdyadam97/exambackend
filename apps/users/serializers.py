@@ -7,6 +7,7 @@ from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
 from apps.users.models import User, UserProfile
 from apps.content.serializers import CategoryResource
+from apps.users.choices import GOVERNORATES, SPECIALIZATIONS
 
 # +962 then a mobile prefix 77/78/79 and 7 digits: the only numbers the SMS gateway delivers to.
 JORDAN_MOBILE = re.compile(r'^\+9627[789]\d{7}$')
@@ -77,8 +78,8 @@ class UserSignupSerializer(serializers.Serializer):
     password = serializers.CharField(min_length=8)
     password_confirmation = serializers.CharField(min_length=8)
     email = serializers.EmailField(required=False, allow_null=True, allow_blank=True)
-    specialization = serializers.CharField(max_length=255)
-    governorate = serializers.CharField(max_length=255)
+    specialization = serializers.ChoiceField(choices=SPECIALIZATIONS)
+    governorate = serializers.ChoiceField(choices=GOVERNORATES)
     birth_date = serializers.DateField()
 
     def validate_birth_date(self, value):
@@ -135,8 +136,8 @@ class UpdateProfileSerializer(serializers.Serializer):
     last_name = serializers.CharField(max_length=255, required=False)
     email = serializers.EmailField(required=False, allow_null=True)
     phone_country_code = serializers.CharField(max_length=10, required=False, allow_blank=True)
-    specialization = serializers.CharField(max_length=255, required=False)
-    governorate = serializers.CharField(max_length=255, required=False)
+    specialization = serializers.ChoiceField(choices=SPECIALIZATIONS, required=False)
+    governorate = serializers.ChoiceField(choices=GOVERNORATES, required=False)
     birth_date = serializers.DateField(required=False)
 
 

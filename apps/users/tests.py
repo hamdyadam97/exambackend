@@ -284,6 +284,14 @@ class AuthFlowSecurityTests(TestCase):
         self.assertIn('birth_date', res.json()['errors'])
         self.assertFalse(User.objects.filter(phone='+962791111114').exists())
 
+    def test_signup_accepts_only_listed_specialization_and_governorate(self, send_otp):
+        res = self.signup('791111115', specialization='doctor', governorate='doctor')
+        self.assertEqual(res.status_code, 422, res.json())
+        self.assertIn('specialization', res.json()['errors'])
+        self.assertIn('governorate', res.json()['errors'])
+        res = self.signup('791111115', specialization='Pharmacy', governorate="Ma'an")
+        self.assertEqual(res.status_code, 200, res.json())
+
     def test_signup_with_empty_optional_email(self, send_otp):
         # Two students without an email must not collide on the unique email column.
         for number in ('791111112', '791111113'):
