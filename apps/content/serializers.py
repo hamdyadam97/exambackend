@@ -63,11 +63,12 @@ class CategoryResource(serializers.ModelSerializer):
 class TopicResource(serializers.ModelSerializer):
     name = serializers.CharField(source='topic', read_only=True)
     category_id = serializers.IntegerField(read_only=True)
+    section_id = serializers.IntegerField(read_only=True)
     questions_count = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionsTopic
-        fields = ['id', 'name', 'category_id', 'questions_count']
+        fields = ['id', 'name', 'category_id', 'section_id', 'questions_count']
 
     def get_questions_count(self, obj):
         if hasattr(obj, 'questions_count'):

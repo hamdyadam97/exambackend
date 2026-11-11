@@ -97,6 +97,15 @@ class QuestionsTopic(models.Model):
         blank=True,
         limit_choices_to={'level__in': [Category.LEVEL_CATEGORY, Category.LEVEL_SUB_CATEGORY]}
     )
+    # The section this topic belongs to (e.g. Pneumonia -> Respiratory System). Topics are not a
+    # step of their own in the exam builder: they are an optional filter inside their section.
+    section = models.ForeignKey(
+        'ExamSection',
+        on_delete=models.SET_NULL,
+        related_name='topics',
+        null=True,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

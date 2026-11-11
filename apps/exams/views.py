@@ -299,10 +299,11 @@ class ExamSectionsView(BaseApiView):
         except ValueError:
             return api_response(True, 'Fetched Successfully', {'sections': [], 'total_questions': 0, 'total_stages': 0})
 
-        # Sections may be attached to any level of the selected category tree,
-        # so consider the selected specialty, category and sub-category ids.
+        # Sections may be attached to any level of the selected category tree, or be shared by
+        # every exam (no category: Respiratory System, Cardiovascular System, ...). Only sections
+        # with questions on the selected path are listed (question_chain below).
         selected_category_ids = set(category_ids + sub_category_ids + sub_sub_category_ids)
-        sections = ExamSection.objects.filter(category_id__in=selected_category_ids)
+        sections = ExamSection.objects.filter(Q(category_id__in=selected_category_ids) | Q(category__isnull=True))
 
         # The section count is cumulative: every classification level selected
         # above the section must match, plus a link to this section — the same
@@ -439,7 +440,7 @@ class ExamRefreshView(BaseApiView):
 
         if cids:
             selected_category_ids = set(cids + scids + sscids)
-            sections = ExamSection.objects.filter(category_id__in=selected_category_ids)
+            sections = ExamSection.objects.filter(Q(category_id__in=selected_category_ids) | Q(category__isnull=True))
 
             question_chain = exam_classification_q(
                 'exam_section_links__question',

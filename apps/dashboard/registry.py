@@ -89,8 +89,8 @@ DASHBOARD_MODELS = {
     ),
     'topics': _base(
         QuestionsTopic, 'Question Topics',
-        ['topic', 'category'],
-        search_fields=['topic', 'category__name'],
+        ['topic', 'section', 'category'],
+        search_fields=['topic', 'section__name', 'category__name'],
     ),
     'sections': _base(
         ExamSection, 'Exam Sections',
