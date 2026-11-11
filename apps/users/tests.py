@@ -277,6 +277,13 @@ class AuthFlowSecurityTests(TestCase):
             'specialization': 'Nursing', 'governorate': 'Amman', 'birth_date': '2000-01-01', **extra,
         })
 
+    def test_signup_rejects_unrealistic_birth_date(self, send_otp):
+        from datetime import date
+        res = self.signup('791111114', birth_date=date.today().isoformat())
+        self.assertEqual(res.status_code, 422, res.json())
+        self.assertIn('birth_date', res.json()['errors'])
+        self.assertFalse(User.objects.filter(phone='+962791111114').exists())
+
     def test_signup_with_empty_optional_email(self, send_otp):
         # Two students without an email must not collide on the unique email column.
         for number in ('791111112', '791111113'):

@@ -31,7 +31,8 @@ class SmsService:
                 logger.info('OTP SMS response %s: %s', response.status_code, response.text[:200])
                 return response.ok
             except Exception as e:
-                logger.error('OTP SMS FAILED: %s', e)
+                # Log the error type only: the exception text holds the request URL with the gateway password and the code.
+                logger.error('OTP SMS FAILED: %s (gateway unreachable or rejected the request)', type(e).__name__)
                 return False
         if settings.DEBUG:
             # Development only: there is no SMS gateway, so show the code to whoever runs the server.

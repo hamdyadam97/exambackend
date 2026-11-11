@@ -81,6 +81,14 @@ class UserSignupSerializer(serializers.Serializer):
     governorate = serializers.CharField(max_length=255)
     birth_date = serializers.DateField()
 
+    def validate_birth_date(self, value):
+        from datetime import date
+        today = date.today()
+        age = today.year - value.year - ((today.month, today.day) < (value.month, value.day))
+        if age < 15 or age > 100:
+            raise serializers.ValidationError('Please enter a valid birth date.')
+        return value
+
     def validate_email(self, value):
         # Optional: an empty field means no email. Stored as NULL because the column is unique.
         if not value:
