@@ -34,12 +34,15 @@ class OtpService:
 
     @classmethod
     def send(cls, phone: str, ip_address=None):
-        """Create a new OTP for the phone and send it by SMS. Earlier codes stop working."""
+        """Create a new OTP for the phone and send it by SMS. Earlier codes stop working.
+
+        Returns whether the SMS gateway accepted the message, so callers never claim a code was sent
+        when it was not.
+        """
         from apps.core.services import SmsService
         OtpRequest.objects.filter(phone=phone, verified=False).update(verified=True)
         otp = cls.generate(phone, ip_address)
-        SmsService.send_otp(phone, otp)
-        return otp
+        return bool(SmsService.send_otp(phone, otp))
 
     @classmethod
     def verify(cls, phone: str, otp: str):

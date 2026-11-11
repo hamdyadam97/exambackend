@@ -1,10 +1,15 @@
 """
 User serializers.
 """
+import re
+
 from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
 from apps.users.models import User, UserProfile
 from apps.content.serializers import CategoryResource
+
+# +962 then a mobile prefix 77/78/79 and 7 digits: the only numbers the SMS gateway delivers to.
+JORDAN_MOBILE = re.compile(r'^\+9627[789]\d{7}$')
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -87,8 +92,11 @@ class UserSignupSerializer(serializers.Serializer):
     def validate(self, data):
         if data.get('password') != data.get('password_confirmation'):
             raise serializers.ValidationError({'password': ['Password confirmation does not match.']})
+        # Verification codes are delivered by a Jordanian SMS gateway, so only Jordanian mobiles can sign up.
+        if not JORDAN_MOBILE.match(data.get('phone') or ''):
+            raise serializers.ValidationError({'PhoneNotJordanian': ['Registration is available for Jordanian mobile numbers only (+962 7X XXX XXXX).']})
         if User.objects.filter(phone=data.get('phone')).exists():
-            raise serializers.ValidationError({'phone': ['This phone number is already registered. Please log in.']})
+            raise serializers.ValidationError({'PhoneTaken': ['This phone number is already registered. Please log in.']})
         return data
 
 

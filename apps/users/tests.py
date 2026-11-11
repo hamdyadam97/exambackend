@@ -3,7 +3,7 @@ Tests for users app.
 """
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from apps.users.models import User, UserProfile, OtpRequest
 from apps.users.services import UserService, OtpService
@@ -288,11 +288,36 @@ class AuthFlowSecurityTests(TestCase):
         self.assertEqual(self.signup('791111114', email='sara@example.com').status_code, 200)
         res = self.signup('791111114', email='other@example.com')
         self.assertEqual(res.status_code, 422)
-        self.assertIn('phone', res.json()['errors'])
+        self.assertIn('PhoneTaken', res.json()['errors'])
         res = self.signup('791111115', email='SARA@example.com')
         self.assertEqual(res.status_code, 422)
         self.assertIn('email', res.json()['errors'])
 
+
+    def test_signup_only_for_jordanian_mobiles(self, send_otp):
+        res = self.post('/api/signup', {
+            'first_name': 'Sara', 'last_name': 'Ali', 'dial_code': '+966', 'mobile_number': '512345678',
+            'password': 'StudentPass1', 'password_confirmation': 'StudentPass1',
+            'specialization': 'Nursing', 'governorate': 'Amman', 'birth_date': '2000-01-01',
+        })
+        self.assertEqual(res.status_code, 422)
+        self.assertIn('PhoneNotJordanian', res.json()['errors'])
+        send_otp.assert_not_called()
+        self.assertFalse(User.objects.filter(phone='+966512345678').exists())
+
+    def test_failed_sms_creates_no_account(self, send_otp):
+        send_otp.return_value = False
+        res = self.signup('791111116')
+        self.assertEqual(res.status_code, 503)
+        self.assertIn('SmsFailed', res.json()['errors'])
+        # Nothing half-created: the student can simply try again later.
+        self.assertFalse(User.objects.filter(phone='+962791111116').exists())
+
+    def test_failed_sms_is_reported_on_resend(self, send_otp):
+        send_otp.return_value = False
+        res = self.post('/api/forget', {'mobile': self.PHONE})
+        self.assertEqual(res.status_code, 503)
+        self.assertIn('SmsFailed', res.json()['errors'])
 
 # Was a second "OtpServiceTests", silently shadowed by the class below so these never ran.
 class UserServiceSignupTests(TestCase):
@@ -347,3 +372,17 @@ class OtpServiceTests(TestCase):
         OtpRequest.objects.update(expires_at=timezone.now() - timezone.timedelta(minutes=1))
         ok, msg = OtpService.verify('962791234567', otp)
         self.assertFalse(ok)
+
+
+class SmsGatewayFormatTests(TestCase):
+    @override_settings(SMS_PROVIDER='broadnet', BROADNET_USER='u', BROADNET_PASS='p', BROADNET_SID='s')
+    def test_number_is_sent_without_plus_and_failure_is_reported(self):
+        from apps.core.services import SmsService
+        with patch('apps.core.services.requests.get') as get:
+            get.return_value.ok = True
+            get.return_value.status_code = 200
+            get.return_value.text = 'Success'
+            self.assertTrue(SmsService.send_otp('+962791234567', '123456'))
+            self.assertEqual(get.call_args.kwargs['params']['mno'], '962791234567')
+            get.side_effect = TimeoutError('gateway unreachable')
+            self.assertFalse(SmsService.send_otp('+962791234567', '123456'))

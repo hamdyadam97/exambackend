@@ -21,16 +21,17 @@ class SmsService:
                         'user': settings.BROADNET_USER,
                         'pass': settings.BROADNET_PASS,
                         'sid': settings.BROADNET_SID,
-                        'mno': mobile,
+                        # The gateway expects the number in international form without '+', e.g. 9627XXXXXXXX.
+                        'mno': str(mobile).lstrip('+'),
                         'type': 4,
                         'text': message,
                     },
                     timeout=30,
                 )
-                logger.info('OTP SMS RESPONSE', extra={'mobile': mobile, 'response': response.text})
+                logger.info('OTP SMS response %s: %s', response.status_code, response.text[:200])
                 return response.ok
             except Exception as e:
-                logger.error('OTP SMS FAILED', extra={'mobile': mobile, 'error': str(e)})
+                logger.error('OTP SMS FAILED: %s', e)
                 return False
         if settings.DEBUG:
             # Development only: there is no SMS gateway, so show the code to whoever runs the server.

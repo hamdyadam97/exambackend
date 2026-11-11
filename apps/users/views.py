@@ -22,6 +22,10 @@ from apps.users.throttling import client_ip, is_throttled, register_failed_attem
 logger = logging.getLogger('api')
 
 
+class SmsNotSent(Exception):
+    """The SMS gateway did not accept the verification code."""
+
+
 def _mask_phone(phone):
     """Keep only the last 3 digits for diagnostics; never log full numbers."""
     if not phone:
@@ -113,10 +117,14 @@ class SignupView(BaseApiView):
                     birth_date=validated['birth_date'],
                     profile_completed=True,
                 )
+                # No code means the student could never verify: keep no half-created account.
+                if not OtpService.send(user.phone, client_ip(request)):
+                    raise SmsNotSent
+        except SmsNotSent:
+            return send_error('SMS not sent', {'SmsFailed': ['We could not send the verification code right now. Please try again later.']}, 503)
         except Exception:
             logger.exception('Signup failed (phone=%s)', _mask_phone(validated.get('phone')))
             return send_error('User details not saved', {'UserDetailsNotSaved': ['Could not create the account.']}, 400)
-        OtpService.send(user.phone, client_ip(request))
         return send_response('User details saved successfully', {'user': UserResource(user, context={'request': request}).data})
 
 
@@ -150,7 +158,8 @@ class ResendOtpView(BaseApiView):
         if not OtpService.can_resend(user.phone):
             return send_error('Too Many Requests', {'otp': ['OTP already sent, please wait a minute']}, 429)
 
-        OtpService.send(user.phone, client_ip(request))
+        if not OtpService.send(user.phone, client_ip(request)):
+            return send_error('SMS not sent', {'SmsFailed': ['We could not send the verification code right now. Please try again later.']}, 503)
         return send_response('OTP Send Successfully', {
             'phone': user.phone,
             'expires_at': timezone.now() + timezone.timedelta(minutes=OtpService.EXPIRY_MINUTES),
@@ -228,8 +237,8 @@ class LoginView(BaseApiView):
             )
 
         if not user.is_phone_verified:
-            if OtpService.can_resend(user.phone):
-                OtpService.send(user.phone, ip)
+            if OtpService.can_resend(user.phone) and not OtpService.send(user.phone, ip):
+                return send_error('SMS not sent', {'SmsFailed': ['We could not send the verification code right now. Please try again later.']}, 503)
             return send_response('OTP Send Successfully', {
                 'user': {'phone': user.phone},
                 'go_to_verify': True,
@@ -252,7 +261,8 @@ class ForgetPasswordView(BaseApiView):
         if not OtpService.can_resend(user.phone):
             return send_error('Too Many Requests', {'otp': ['OTP already sent, please wait a minute']}, 429)
 
-        OtpService.send(user.phone, client_ip(request))
+        if not OtpService.send(user.phone, client_ip(request)):
+            return send_error('SMS not sent', {'SmsFailed': ['We could not send the verification code right now. Please try again later.']}, 503)
         # Only the phone is returned: the caller has not proven they own this account yet.
         return send_response('OTP Send Successfully', {'user': {'phone': user.phone}})
 
