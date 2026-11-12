@@ -60,3 +60,18 @@ class DashboardAccessTests(TestCase):
         self.client.login(phone='+962790000001', password='admin123')
         response = self.client.get('/admin/reports/')
         self.assertEqual(response.status_code, 200)
+
+
+class DashboardLogoutTests(TestCase):
+    def test_logout_button_posts_and_logs_out(self):
+        admin = User.objects.create_superuser(phone='+962790000009', password='admin123', email='a9@rootsexams.com')
+        client = Client()
+        client.force_login(admin)
+        page = client.get('/admin/').content.decode()
+        self.assertIn('method="post" action="/system-admin/logout/"', page)
+        self.assertNotIn('href="/system-admin/logout/"', page)
+        self.assertIn('/system-admin/password_change/', page)
+        self.assertEqual(client.get('/system-admin/password_change/').status_code, 200)
+        res = client.post('/system-admin/logout/')
+        self.assertIn(res.status_code, (200, 302))
+        self.assertEqual(client.get('/admin/').status_code, 302)  # logged out: back to the login page
