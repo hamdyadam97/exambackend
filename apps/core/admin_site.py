@@ -11,6 +11,18 @@ class RootsExamsAdminSite(AdminSite):
     index_title = 'Dashboard'
     index_template = 'admin/dashboard.html'
 
+    def logout(self, request, extra_context=None):
+        """Log out (POST only, for CSRF safety) and go straight back to the login form instead of
+        Django's "Logged out" page. A plain visit to the logout address just returns to the dashboard."""
+        from django.contrib.auth import logout as auth_logout
+        from django.shortcuts import redirect
+        from django.urls import reverse
+
+        if request.method == 'POST':
+            auth_logout(request)
+            return redirect(f"{reverse(f'{self.name}:login')}?next=/admin/")
+        return redirect('/admin/')
+
     def each_context(self, request):
         context = super().each_context(request)
         context['stats'] = self._get_stats()

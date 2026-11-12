@@ -72,6 +72,8 @@ class DashboardLogoutTests(TestCase):
         self.assertNotIn('href="/system-admin/logout/"', page)
         self.assertIn('/system-admin/password_change/', page)
         self.assertEqual(client.get('/system-admin/password_change/').status_code, 200)
+        # A plain visit does not log out (no CSRF-less logout) and does not show an error page.
+        self.assertRedirects(client.get('/system-admin/logout/'), '/admin/', fetch_redirect_response=False)
         res = client.post('/system-admin/logout/')
-        self.assertIn(res.status_code, (200, 302))
-        self.assertEqual(client.get('/admin/').status_code, 302)  # logged out: back to the login page
+        self.assertRedirects(res, '/system-admin/login/?next=/admin/', fetch_redirect_response=False)
+        self.assertEqual(client.get('/admin/').status_code, 302)  # really logged out
