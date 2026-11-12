@@ -34,3 +34,7 @@ admin_rendered.html
 node_modules/
 static_src/twtest/
 logs/
+
+# Backups of the environment file (they hold secrets)
+.env.*
+!.env.example
