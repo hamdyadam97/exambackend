@@ -106,6 +106,7 @@ class ExamTrialResource(serializers.ModelSerializer):
     topics = TopicResource(many=True, read_only=True)
     mode_label = serializers.CharField(source='get_mode', read_only=True)
     question_mode_label = serializers.CharField(source='get_question_mode', read_only=True)
+    time_spent_minutes = serializers.SerializerMethodField()
 
     class Meta:
         model = ExamTrail
@@ -114,8 +115,15 @@ class ExamTrialResource(serializers.ModelSerializer):
             'is_timed_mode', 'question_count', 'total_questions', 'correct_answers',
             'wrong_answers', 'stages', 'current_stage', 'status',
             'categories', 'sub_categories', 'sub_sub_categories', 'sections', 'topics',
-            'created_at',
+            'duration_minutes', 'time_spent_minutes', 'created_at',
         ]
+
+    def get_time_spent_minutes(self, obj):
+        """From the start to the submission (the last save); never more than the time limit."""
+        if obj.status != 'completed' or not obj.created_at or not obj.updated_at:
+            return None
+        minutes = max(1, round((obj.updated_at - obj.created_at).total_seconds() / 60))
+        return min(minutes, obj.duration_minutes) if obj.duration_minutes else minutes
 
 
 class ExamTrialIndexResource(serializers.ModelSerializer):

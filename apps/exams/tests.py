@@ -573,3 +573,34 @@ class LetterExplanationOrderTests(TestCase):
         self.assertNotEqual(trail.answer_order(q.id, ids), ids)  # this trail would shuffle
         shown = client.get(f'/api/exams/{q.id}/get-question?exam_id={trail.id}').json()['data']['question']['answers']
         self.assertEqual([a['id'] for a in shown], ids)
+
+
+class ExamResultTests(TestCase):
+    def test_unanswered_questions_are_skipped_not_wrong_and_reports_use_real_questions(self):
+        from apps.content.models import ExamSection
+        from apps.exams.models import ExamSectionLink
+
+        user = User.objects.create_user(phone='962791234504', password='pass')
+        client = APIClient()
+        client.force_authenticate(user)
+        root = Category.objects.create(name='Board')
+        peds = Category.objects.create(name='Pediatrics', parent=root, level=2)
+        section = ExamSection.objects.create(name='Respiratory System')
+        trail = ExamTrail.objects.create(user=user, title='t')
+        for i in range(5):
+            q = Question.objects.create(text_question=f'q{i}', category=root, sub_category=peds, status=1)
+            right = Answer.objects.create(question=q, answer_option='r')
+            wrong = Answer.objects.create(question=q, answer_option='w')
+            ExamSectionLink.objects.create(question=q, section=section)
+            # q0 right, q1 wrong, q2..q4 not answered
+            answer = right if i == 0 else wrong if i == 1 else None
+            trail.details.create(question=q, answer=answer, is_correct=(i == 0) if answer else None)
+        trail.finish()
+        self.assertEqual((trail.total_questions, trail.correct_answers, trail.wrong_answers), (5, 1, 1))
+
+        data = client.get(f'/api/exams/{trail.id}/get').json()['data']
+        subs = data['exam_report']['sub_categories']['result']
+        self.assertEqual(subs, [{'id': peds.id, 'name': 'Pediatrics', 'total_questions': 5,
+                                 'correct_answers': 1, 'wrong_answers': 1, 'skipped': 3}])
+        self.assertEqual(data['exam_report']['sections']['result'][0]['name'], 'Respiratory System')
+        self.assertIsNotNone(data['exam']['time_spent_minutes'])

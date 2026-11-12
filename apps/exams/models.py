@@ -767,17 +767,19 @@ class ExamTrail(models.Model):
         """Close the trail, store its score, and record the attempt for ready-made exams."""
         total = self.details.count()
         correct = self.details.filter(is_correct=True).count()
+        answered = self.details.filter(answer__isnull=False).count()
         self.status = 'completed'
         self.total_questions = total
         self.correct_answers = correct
-        self.wrong_answers = total - correct
+        # Only answered questions can be wrong; unanswered ones are skipped (total - correct - wrong).
+        self.wrong_answers = max(answered - correct, 0)
         self.save()
 
         user_exam = self.user_exam
         if user_exam and user_exam.status != UserExam.STATUS_SUBMITTED:
             user_exam.status = UserExam.STATUS_SUBMITTED
             user_exam.correct_answers = correct
-            user_exam.wrong_answers = total - correct
+            user_exam.wrong_answers = max(answered - correct, 0)
             user_exam.score = round(correct * 100 / total) if total else 0
             user_exam.end_date = timezone.now().date()
             user_exam.save()
@@ -819,50 +821,53 @@ class ExamTrail(models.Model):
         self.save(update_fields=['current_stage'])
         return True
 
-    def get_category_report(self):
+    def _report(self, title, groups):
+        """groups: {key: (name, [question ids])} -> per-group totals for the result page."""
+        details = {d.question_id: d for d in self.details.all()}
         result = []
-        for category in self.categories.all():
-            total = self.questions.filter(category=category).values_list('id', flat=True)
-            total_ids = list(total)
-            correct = self.details.filter(question_id__in=total_ids, is_correct=True).count() if total_ids else 0
-            result.append({'id': category.id, 'name': category.name, 'total_questions': len(total_ids), 'correct_answers': correct})
-        return {'title': 'Categories', 'result': result}
+        for key, (name, qids) in groups.items():
+            rows = [details[q] for q in qids if q in details]
+            correct = sum(1 for d in rows if d.is_correct)
+            answered = sum(1 for d in rows if d.answer_id)
+            result.append({
+                'id': key, 'name': name, 'total_questions': len(rows),
+                'correct_answers': correct, 'wrong_answers': answered - correct, 'skipped': len(rows) - answered,
+            })
+        result.sort(key=lambda r: -r['total_questions'])
+        return {'title': title, 'result': result}
+
+    def _group_by_field(self, field):
+        """Group this exam's own questions by one of their category fields."""
+        groups = {}
+        for qid, key, name in self.details.values_list('question_id', f'question__{field}_id', f'question__{field}__name'):
+            if key:
+                groups.setdefault(key, (name, []))[1].append(qid)
+        return groups
+
+    # The reports describe the questions that were really in the exam (not the filters picked when building it),
+    # so an exam built without sections or topics still gets its charts.
+    def get_category_report(self):
+        return self._report('Categories', self._group_by_field('category'))
 
     def get_sub_category_report(self):
-        result = []
-        for sub in self.sub_categories.all():
-            total = self.questions.filter(sub_category=sub).values_list('id', flat=True)
-            total_ids = list(total)
-            correct = self.details.filter(question_id__in=total_ids, is_correct=True).count() if total_ids else 0
-            result.append({'id': sub.id, 'name': sub.name, 'total_questions': len(total_ids), 'correct_answers': correct})
-        return {'title': 'Sub Categories', 'result': result}
+        return self._report('Sub Categories', self._group_by_field('sub_category'))
 
     def get_sub_sub_category_report(self):
-        result = []
-        for sub in self.sub_sub_categories.all():
-            total = self.questions.filter(sub_subcategory=sub).values_list('id', flat=True)
-            total_ids = list(total)
-            correct = self.details.filter(question_id__in=total_ids, is_correct=True).count() if total_ids else 0
-            result.append({'id': sub.id, 'name': sub.name, 'total_questions': len(total_ids), 'correct_answers': correct})
-        return {'title': 'Sub SubCategories', 'result': result}
+        return self._report('Sub Sub Categories', self._group_by_field('sub_subcategory'))
 
     def get_section_report(self):
-        result = []
-        for section in self.sections.all():
-            total = self.questions.filter(exam_section_links__section=section).values_list('id', flat=True)
-            total_ids = list(total)
-            correct = self.details.filter(question_id__in=total_ids, is_correct=True).count() if total_ids else 0
-            result.append({'id': section.id, 'name': section.name, 'total_questions': len(total_ids), 'correct_answers': correct})
-        return {'title': 'Sections', 'result': result}
+        qids = list(self.details.values_list('question_id', flat=True))
+        groups = {}
+        for qid, key, name in ExamSectionLink.objects.filter(question_id__in=qids).values_list('question_id', 'section_id', 'section__name'):
+            groups.setdefault(key, (name, []))[1].append(qid)
+        return self._report('Sections', groups)
 
     def get_topics_report(self):
-        result = []
-        for topic in self.topics.all():
-            total = self.questions.filter(question_topics__topic=topic).values_list('id', flat=True)
-            total_ids = list(total)
-            correct = self.details.filter(question_id__in=total_ids, is_correct=True).count() if total_ids else 0
-            result.append({'id': topic.id, 'name': topic.topic, 'total_questions': len(total_ids), 'correct_answers': correct})
-        return {'title': 'Topics', 'result': result}
+        qids = list(self.details.values_list('question_id', flat=True))
+        groups = {}
+        for qid, key, name in QuestionTopic.objects.filter(question_id__in=qids).values_list('question_id', 'topic_id', 'topic__topic'):
+            groups.setdefault(key, (name, []))[1].append(qid)
+        return self._report('Topics', groups)
 
 
 class ExamTrailCategoryLink(models.Model):
