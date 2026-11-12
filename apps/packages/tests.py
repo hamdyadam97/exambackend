@@ -49,3 +49,28 @@ class SubscriptionServiceTests(TestCase):
         self.assertEqual(sub.user, self.user)
         self.assertEqual(sub.price, Decimal('50.00'))
         self.assertIsNotNone(sub.end_date)
+
+
+class ImportPackagesTests(TestCase):
+    def test_import_links_the_right_category_and_is_rerunnable(self):
+        import json
+        import tempfile
+        from django.core.management import call_command
+
+        call_command('seed_taxonomy', verbosity=0)
+        rows = [
+            {'name': 'Urology Board - 1 Month', 'price': 40, 'period_days': 30,
+             'path': ['Residency and Board Exams', 'Urology'], 'active': True},
+            {'name': 'Free Trial - 7 يوم', 'price': 0, 'period_days': 7, 'path': ['Free Trial (20 questions)'],
+             'active': True, 'is_trial': True, 'number_of_questions': 20},
+        ]
+        f = tempfile.NamedTemporaryFile('w', suffix='.json', delete=False, encoding='utf-8')
+        json.dump(rows, f)
+        f.close()
+        call_command('import_packages', f.name, verbosity=0)
+        call_command('import_packages', f.name, verbosity=0)
+        self.assertEqual(Package.objects.count(), 2)
+        urology = Package.objects.get(name='Urology Board - 1 Month')
+        self.assertEqual((urology.category.name, urology.category.parent.name), ('Urology', 'Residency and Board Exams'))
+        trial = Package.objects.get(is_trial=True)
+        self.assertEqual((trial.category.name, trial.period_days, trial.number_of_questions), ('Free Trial (20 questions)', 7, 20))

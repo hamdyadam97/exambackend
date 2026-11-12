@@ -5,6 +5,7 @@ import random
 from datetime import timedelta
 
 from django.db import models
+from apps.packages.access import access_scope
 from django.db.models import Q
 from django.conf import settings
 from django.utils import timezone
@@ -12,7 +13,8 @@ from django.utils.translation import gettext_lazy as _
 
 
 def exam_classification_q(prefix='', category_ids=None, sub_category_ids=None,
-                          sub_sub_category_ids=None, section_ids=None, topic_ids=None, difficulty=None):
+                          sub_sub_category_ids=None, section_ids=None, topic_ids=None, difficulty=None,
+                          scope=None):
     """Cumulative (AND) filter for the exam question pool, shared by the
     creation wizard counts and the actual exam build so both always agree.
 
@@ -36,6 +38,9 @@ def exam_classification_q(prefix='', category_ids=None, sub_category_ids=None,
         chain &= Q(**{f'{p}question_topics__topic_id__in': topic_ids})
     if difficulty:
         chain &= Q(**{f'{p}difficulty': difficulty})
+    if scope is not None:
+        # Only questions the user's subscriptions open (apps.packages.access).
+        chain &= scope.question_q(prefix)
     return chain
 
 
@@ -616,6 +621,7 @@ class ExamTrail(models.Model):
             section_ids=sections,
             topic_ids=topics,
             difficulty=self.difficulty,
+            scope=access_scope(self.user),
         )).distinct()
 
     def answer_order(self, question_id, answer_ids):

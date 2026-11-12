@@ -22,6 +22,14 @@ from apps.content.serializers import (
 from apps.core.utils import api_response, send_response, send_error, api_get, api_post
 from apps.content.models import Setting
 from apps.exams.insights import student_insights
+from apps.packages.access import access_scope
+
+
+def scoped_q(request, *args, **kwargs):
+    """exam_classification_q limited to what the requesting user's subscriptions open."""
+    if not hasattr(request, '_access_scope'):
+        request._access_scope = access_scope(request.user)
+    return exam_classification_q(*args, scope=request._access_scope, **kwargs)
 
 
 class BaseApiView(APIView):
@@ -202,10 +210,14 @@ class ExamCreateView(BaseApiView):
 
     @api_get('ExamCreate')
     def get(self, request):
-        user = request.user
-        root_ids = list(user.subscribed_categories().values_list('id', flat=True))
-        categories = Category.objects.filter(id__in=root_ids, status=1).annotate(
-            questions_count=Count('questions', filter=exam_classification_q('questions'), distinct=True)
+        scope = access_scope(request.user)
+        request._access_scope = scope
+        roots = Category.objects.filter(level=Category.LEVEL_CATEGORY, parent=None, status=1)
+        if not scope.everything:
+            # The level-1 category above every subscription, whatever level the package is linked to.
+            roots = roots.filter(id__in=scope.visible)
+        categories = roots.annotate(
+            questions_count=Count('questions', filter=scoped_q(request, 'questions'), distinct=True)
         ).order_by('name')
 
         return api_response(True, 'Fetched Successfully', {
@@ -232,7 +244,7 @@ class ExamSubCategoriesView(BaseApiView):
         # The question must belong to one of the selected specialties (its
         # category FK) on top of carrying this category as its sub_category,
         # so the count is scoped to the specialty selection above it.
-        chain = exam_classification_q('questions_as_sub', category_ids=category_ids)
+        chain = scoped_q(request, 'questions_as_sub', category_ids=category_ids)
         sub_categories = Category.objects.filter(
             parent_id__in=category_ids, status=1, level=Category.LEVEL_SUB_CATEGORY
         ).filter(chain).annotate(
@@ -264,7 +276,7 @@ class ExamSubSubCategoriesView(BaseApiView):
             id__in=Category.objects.filter(id__in=sub_category_ids).values('parent_id')
         ).values_list('id', flat=True))
 
-        chain = exam_classification_q(
+        chain = scoped_q(request, 
             'questions_as_sub_sub',
             category_ids=spec_ids,
             sub_category_ids=sub_category_ids,
@@ -309,7 +321,7 @@ class ExamSectionsView(BaseApiView):
         # above the section must match, plus a link to this section — the same
         # chain ExamTrail.get_question_query builds when drawing questions.
         difficulty = difficulty_param(request)
-        question_chain = exam_classification_q(
+        question_chain = scoped_q(request, 
             'exam_section_links__question',
             category_ids=category_ids,
             sub_category_ids=sub_category_ids,
@@ -324,7 +336,7 @@ class ExamSectionsView(BaseApiView):
         # Total of the distinct questions available across all listed sections,
         # i.e. what the exam would draw if every listed section were selected.
         section_ids = list(sections.values_list('id', flat=True))
-        total_filter = exam_classification_q(
+        total_filter = scoped_q(request, 
             category_ids=category_ids,
             sub_category_ids=sub_category_ids,
             sub_sub_category_ids=sub_sub_category_ids,
@@ -334,7 +346,7 @@ class ExamSectionsView(BaseApiView):
         if not section_ids:
             # No question on this path is filed under a section yet: the student skips the section
             # step and the exam draws from the whole path.
-            total_filter = exam_classification_q(
+            total_filter = scoped_q(request, 
                 category_ids=category_ids,
                 sub_category_ids=sub_category_ids,
                 sub_sub_category_ids=sub_sub_category_ids,
@@ -375,7 +387,7 @@ class ExamTopicsView(BaseApiView):
         # Same cumulative chain as the sections step, plus the selected
         # sections, so a topic only counts questions matching the whole
         # classification path above it.
-        question_chain = exam_classification_q(
+        question_chain = scoped_q(request, 
             'question_topics__question',
             category_ids=category_ids,
             sub_category_ids=sub_category_ids,
@@ -423,7 +435,7 @@ class ExamRefreshView(BaseApiView):
                 sscids = []
 
         if cids:
-            chain = exam_classification_q('questions_as_sub', category_ids=cids)
+            chain = scoped_q(request, 'questions_as_sub', category_ids=cids)
             subs = Category.objects.filter(
                 parent_id__in=cids, status=1, level=Category.LEVEL_SUB_CATEGORY
             ).filter(chain).annotate(
@@ -435,7 +447,7 @@ class ExamRefreshView(BaseApiView):
             rspec_ids = list(Category.objects.filter(
                 id__in=Category.objects.filter(id__in=scids).values('parent_id')
             ).values_list('id', flat=True))
-            rchain = exam_classification_q(
+            rchain = scoped_q(request, 
                 'questions_as_sub_sub',
                 category_ids=rspec_ids,
                 sub_category_ids=scids,
@@ -451,7 +463,7 @@ class ExamRefreshView(BaseApiView):
             selected_category_ids = set(cids + scids + sscids)
             sections = ExamSection.objects.filter(Q(category_id__in=selected_category_ids) | Q(category__isnull=True))
 
-            question_chain = exam_classification_q(
+            question_chain = scoped_q(request, 
                 'exam_section_links__question',
                 category_ids=cids,
                 sub_category_ids=scids,
@@ -464,14 +476,14 @@ class ExamRefreshView(BaseApiView):
             data['sections'] = SectionResource(sections, many=True, context={'request': request}).data
 
             sids_for_total = list(sections.values_list('id', flat=True))
-            total_filter = exam_classification_q(
+            total_filter = scoped_q(request, 
                 category_ids=cids,
                 sub_category_ids=scids,
                 sub_sub_category_ids=sscids,
                 section_ids=sids_for_total,
             )
             if not sids_for_total:
-                total_filter = exam_classification_q(category_ids=cids, sub_category_ids=scids, sub_sub_category_ids=sscids)
+                total_filter = scoped_q(request, category_ids=cids, sub_category_ids=scids, sub_sub_category_ids=sscids)
             total = Question.objects.filter(total_filter).distinct().count()
             data['total_questions'] = total
             data['total_stages'] = (total + 39) // 40 if total > 0 else 0
@@ -481,7 +493,7 @@ class ExamRefreshView(BaseApiView):
                 sids = [int(x) for x in section_ids]
             except ValueError:
                 sids = []
-            question_chain = exam_classification_q(
+            question_chain = scoped_q(request, 
                 'question_topics__question',
                 category_ids=cids,
                 sub_category_ids=scids,

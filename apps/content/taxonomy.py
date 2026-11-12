@@ -47,6 +47,7 @@ TREE = [
     ]),
     ('JMC - الفحص الإجمالي - امتياز', [
         ('JMC - طب بشري', MEDICINE),
+        ('JMC - طب أسنان', DENTAL),
     ]),
     ('Residency Entrance - Medicine', [
         ('Royal Medical Services (RMS)', MEDICINE),
@@ -66,7 +67,6 @@ TREE = [
         ('MOH وزارة الصحة (التنافسي - دخول الإقامة)', DENTAL),
         ('Royal Medical Services (RMS) - Dentistry', DENTAL),
         ('Residency and Board Exams - Dentistry', DENTAL),
-        ('JMC - طب أسنان', DENTAL),
     ]),
     ('Nursing', [
         ('امتحان مزاولة المهنة للتمريض', NURSING),
@@ -87,6 +87,10 @@ TREE = [
     ('MRCP', [
         ('MRCP Part 1', ['Cardiology']),
     ]),
+    # Opened by the free trial package given at sign-up.
+    ('Free Trial (20 questions)', [
+        ('Free Trial', ['Sample Questions']),
+    ]),
 ]
 
 # Level-1 rows renamed earlier (by hand or by the first version of this seed): renamed back in
@@ -102,8 +106,8 @@ ROOT_RENAMES = {
     'JMC - الفحص الإجمالي': 'JMC - الفحص الإجمالي - امتياز',
 }
 
-# Level-1 rows that --prune leaves alone even though they are not in TREE (decision pending).
-PRUNE_KEEP = {'Free Trial (20 questions)'}
+# Level-1 rows that --prune leaves alone even though they are not in TREE.
+PRUNE_KEEP = set()
 
 # Section -> its topics. Section names are unique; a topic name appears under one section only.
 SECTIONS = {

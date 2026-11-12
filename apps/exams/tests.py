@@ -12,10 +12,18 @@ from apps.exams.services import ExamTrailService
 from apps.packages.models import Package, UserPackage
 
 
+def subscribe(user, category):
+    """An active package subscription opening `category` (exams only draw from subscribed categories)."""
+    package = Package.objects.create(name=f'Package {category.name}', category=category, period_days=30)
+    today = timezone.now().date()
+    return UserPackage.objects.create(user=user, package=package, start_date=today, end_date=today + timedelta(days=30))
+
+
 class ExamTrailServiceTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(phone='962791234567', password='pass')
         self.category = Category.objects.create(name='Test Category')
+        subscribe(self.user, self.category)
         self.question = Question.objects.create(text_question='Q1', category=self.category)
 
     def test_create_trail(self):
@@ -51,6 +59,7 @@ class AnswerIntegrityTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         category = Category.objects.create(name='Surgery')
+        subscribe(self.user, category)
         self.question = Question.objects.create(text_question='Q', category=category, status=1, notes='Because.')
         self.right = Answer.objects.create(question=self.question, answer_option='right')
         self.wrong = Answer.objects.create(question=self.question, answer_option='wrong')
@@ -173,6 +182,7 @@ class DifficultyFilterTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.category = Category.objects.create(name='Pediatrics')
+        subscribe(self.user, self.category)
         self.section = ExamSection.objects.create(name='Neonates', category=self.category)
         self.by_level = {}
         for level, count in ((Question.DIFFICULTY_EASY, 2), (Question.DIFFICULTY_HARD, 3), (None, 1)):
@@ -249,6 +259,7 @@ class ExamTimeLimitTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.category = Category.objects.create(name='Nursing')
+        subscribe(self.user, self.category)
         self.questions = [
             Question.objects.create(text_question=f'Q{i}', category=self.category, status=1) for i in range(3)
         ]
@@ -450,6 +461,7 @@ class NoSectionsYetTests(TestCase):
         client = APIClient()
         client.force_authenticate(user)
         root = Category.objects.create(name='JMC')
+        subscribe(user, root)
         for i in range(3):
             Question.objects.create(text_question=f'q{i}', category=root, status=1)
         data = client.get(f'/api/exams/sections?category_ids[]={root.id}').json()['data']
@@ -457,3 +469,55 @@ class NoSectionsYetTests(TestCase):
         res = client.post('/api/exams/store', {'exam_mode': 'exam', 'question_count': 10, 'categories': [root.id]}, format='json')
         self.assertEqual(res.status_code, 200, res.json())
         self.assertEqual(ExamTrail.objects.get(pk=res.json()['data']['exam_id']).details.count(), 3)
+
+
+class SubscriptionAccessTests(TestCase):
+    """Exams only draw from the categories the student's active packages open."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(phone='962791234502', password='pass')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.board = Category.objects.create(name='Board')
+        self.urology = Category.objects.create(name='Urology', parent=self.board, level=2)
+        self.surgery = Category.objects.create(name='Surgery', parent=self.board, level=2)
+        self.other = Category.objects.create(name='SMLE')
+        for sub, n in ((self.urology, 2), (self.surgery, 3)):
+            for i in range(n):
+                Question.objects.create(text_question=f'{sub.name}{i}', category=self.board, sub_category=sub, status=1)
+        Question.objects.create(text_question='smle', category=self.other, status=1)
+
+    def store(self, categories, **extra):
+        return self.client.post('/api/exams/store', {
+            'exam_mode': 'exam', 'question_count': 50, 'categories': categories, **extra}, format='json')
+
+    def roots(self):
+        return [c['name'] for c in self.client.get('/api/exams/create').json()['data']['categories']]
+
+    def test_no_subscription_no_questions(self):
+        self.assertEqual(self.roots(), [])
+        res = self.store([self.other.id])
+        self.assertFalse(res.json()['status'])
+        self.assertFalse(ExamTrail.objects.filter(details__isnull=False).exists())
+
+    def test_sub_category_package_opens_only_that_sub_category(self):
+        subscribe(self.user, self.urology)
+        self.assertEqual(self.roots(), ['Board'])
+        subs = self.client.get(f'/api/exams/subcategories?category_ids[]={self.board.id}').json()['data']['sub_categories']
+        self.assertEqual([s['name'] for s in subs], ['Urology'])
+        # Even asking for the whole category (or another one) only draws the subscribed questions.
+        res = self.store([self.board.id, self.other.id])
+        trail = ExamTrail.objects.get(pk=res.json()['data']['exam_id'])
+        self.assertEqual(set(trail.details.values_list('question__sub_category', flat=True)), {self.urology.id})
+        self.assertEqual(trail.details.count(), 2)
+
+    def test_expired_subscription_closes_access(self):
+        sub = subscribe(self.user, self.other)
+        sub.end_date = timezone.now().date() - timedelta(days=1)
+        sub.save()
+        self.assertEqual(self.roots(), [])
+
+    def test_staff_sees_everything(self):
+        self.user.is_staff = True
+        self.user.save()
+        self.assertEqual(sorted(self.roots()), ['Board', 'SMLE'])

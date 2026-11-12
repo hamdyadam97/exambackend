@@ -62,7 +62,7 @@ class TaxonomySeedTests(TestCase):
         # Every branch is three levels deep, so the exam builder never stops at an empty step.
         for sub in Category.objects.filter(level=Category.LEVEL_SUB_CATEGORY):
             self.assertTrue(sub.children.exists(), sub.name)
-        self.assertFalse(Category.objects.filter(name__regex=r'(4th|5th|6th) Year|Free Trial|20\d\d Exam').exists())
+        self.assertFalse(Category.objects.filter(name__regex=r'(4th|5th|6th) Year|Yarmouk|University of|20\d\d Exam').exists())
 
         # A topic belongs to exactly one section.
         all_topics = [t for topics in SECTIONS.values() for t in topics]
@@ -83,6 +83,10 @@ class SharedSectionTests(TestCase):
         client = APIClient()
         client.force_authenticate(user)
         jmc = Category.objects.create(name='JMC')
+        from datetime import date, timedelta
+        from apps.packages.models import Package, UserPackage
+        package = Package.objects.create(name='JMC', category=jmc, period_days=30)
+        UserPackage.objects.create(user=user, package=package, start_date=date.today(), end_date=date.today() + timedelta(days=30))
         other = Category.objects.create(name='USMLE')
         resp = ExamSection.objects.create(name='Respiratory System')
         ExamSection.objects.create(name='Cardiovascular System')  # no questions: hidden
