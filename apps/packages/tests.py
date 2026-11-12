@@ -74,3 +74,25 @@ class ImportPackagesTests(TestCase):
         self.assertEqual((urology.category.name, urology.category.parent.name), ('Urology', 'Residency and Board Exams'))
         trial = Package.objects.get(is_trial=True)
         self.assertEqual((trial.category.name, trial.period_days, trial.number_of_questions), ('Free Trial (20 questions)', 7, 20))
+
+
+class PackagePreviewTests(TestCase):
+    def test_preview_shows_real_questions_without_answers(self):
+        from apps.exams.models import Answer, Question
+
+        board = Category.objects.create(name='Board')
+        uro = Category.objects.create(name='Urology', parent=board, level=2)
+        package = Package.objects.create(name='Uro', category=uro, price=40, period_days=30)
+        for i in range(5):
+            q = Question.objects.create(text_question=f'<p>q{i}</p>', category=board, sub_category=uro, status=1)
+            q.correct_answer = Answer.objects.create(question=q, answer_option='<p>right</p>')
+            q.save()
+            Answer.objects.create(question=q, answer_option='<p>wrong</p>')
+        Question.objects.create(text_question='hidden', category=board, sub_category=uro, status=1, needs_review=True)
+        data = self.client.get(f'/api/packages/{package.id}/preview').json()['data']
+        self.assertEqual(len(data['samples']), 3)
+        for s in data['samples']:
+            self.assertTrue(s['text'].startswith('<p>q'))
+            self.assertEqual(sorted(s['options']), ['<p>right</p>', '<p>wrong</p>'])
+            self.assertNotIn('correct', str(s.keys()))
+        self.assertEqual(data['package']['questions_count'], 6)

@@ -24,7 +24,7 @@ from apps.exams.views import (
     ExamQuestionStateView, SavedQuestionView, QuestionCollectionView,
 )
 from apps.packages.views import (
-    PackageDataView, PackageListView, PackageDetailView, RelatedPackagesView,
+    PackageDataView, PackageListView, PackageDetailView, RelatedPackagesView, PackagePreviewView,
     UserSubscriptionView, CheckCouponView,
     SubscribeView, PackageCalculatePriceView,
     SubCategoryPackagesView,
@@ -102,6 +102,7 @@ urlpatterns = [
     path('packages/index', PackageListView.as_view(), name='package-list'),
     path('packages/<int:pk>/get', PackageDetailView.as_view(), name='package-detail'),
     path('packages/<int:pk>/related', RelatedPackagesView.as_view(), name='package-related'),
+    path('packages/<int:pk>/preview', PackagePreviewView.as_view(), name='package-preview'),
     path('packages/user-subscription', UserSubscriptionView.as_view(), name='user-subscription'),
     path('packages/subscribe', SubscribeView.as_view(), name='package-subscribe'),
     path('packages/check-coupon', CheckCouponView.as_view(), name='check-coupon'),

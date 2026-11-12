@@ -255,3 +255,40 @@ class SubscribeView(BaseApiView):
         })
 
 
+
+
+class PackagePreviewView(BaseApiView):
+    """A few real questions from the bank a package opens, so visitors can see what they pay for.
+    The correct answer is not sent: the preview only shows the questions and their options."""
+    permission_classes = [AllowAny]
+    SAMPLES = 3
+
+    @api_get('PackagePreview')
+    def get(self, request, pk):
+        from apps.exams.models import Question
+
+        try:
+            package = Package.objects.select_related('category').get(pk=pk, status=1, deleted_at__isnull=True)
+        except Package.DoesNotExist:
+            return send_error('Package not found', {}, 404)
+        samples = []
+        if package.category_id:
+            field = {1: 'category_id', 2: 'sub_category_id'}.get(package.category.level, 'sub_subcategory_id')
+            pool = Question.objects.filter(
+                **{field: package.category_id}, status=Question.ACTIVE, deleted_at__isnull=True, needs_review=False,
+            ).exclude(text_question__icontains='<img')
+            # Cheap random pick on a large table: a few random offsets instead of ORDER BY RANDOM().
+            import random
+            total = pool.count()
+            ids = list(pool.order_by('id').values_list('id', flat=True)[random.randint(0, max(total - 60, 0)):][:60])
+            chosen = random.sample(ids, min(self.SAMPLES, len(ids)))
+            for q in Question.objects.filter(id__in=chosen).prefetch_related('answers'):
+                samples.append({
+                    'id': q.id,
+                    'text': q.text_question,
+                    'options': [a.answer_option for a in q.answers.all() if a.deleted_at is None],
+                })
+        return api_response(True, 'Fetched Successfully', {
+            'package': PackageResource(package, context={'request': request}).data,
+            'samples': samples,
+        })
