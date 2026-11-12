@@ -6,7 +6,8 @@ import re
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, F, Max, Q, Value
+from django.db.models.functions import Coalesce
 from django.utils.html import strip_tags
 from django.utils.text import Truncator
 from apps.exams.models import (
@@ -907,3 +908,76 @@ class ExamFinishView(BaseApiView):
             'correct_answers': exam.correct_answers,
             'wrong_answers': exam.wrong_answers,
         })
+
+
+class ExamAnalyticsView(BaseApiView):
+    """Everything the result page shows, computed from the recorded attempt (apps.exams.analytics)."""
+    permission_classes = [IsAuthenticated]
+
+    @api_get('ExamAnalytics')
+    def get(self, request, exam_id):
+        from apps.exams import analytics
+
+        try:
+            exam = ExamTrail.objects.get(pk=exam_id, user=request.user)
+        except ExamTrail.DoesNotExist:
+            return send_error('Exam not found', {'ExamNotFound': ['No exam found for given exam_id']}, 404)
+        if exam.status != 'completed' and exam.is_expired():
+            exam.finish()
+        if not exam.reveals_answers():
+            return send_error('Exam in progress', {'ExamInProgress': ['Results are available after the exam is submitted']}, 409)
+        name = ' '.join(p for p in (request.user.first_name, request.user.last_name) if p)
+        return api_response(True, 'Fetched Successfully', analytics.build(exam, name))
+
+
+class ExamQuestionTimeView(BaseApiView):
+    """Adds the seconds the student just spent on one question (sent by the player when leaving it)."""
+    permission_classes = [IsAuthenticated]
+    MAX_SECONDS_PER_VISIT = 30 * 60
+
+    @api_post('ExamQuestionTime')
+    def post(self, request, exam_id):
+        try:
+            exam = ExamTrail.objects.get(pk=exam_id, user=request.user)
+        except ExamTrail.DoesNotExist:
+            return send_error('Exam not found', {'ExamNotFound': ['No exam found for given exam_id']}, 404)
+        if exam.status == 'completed':
+            return api_response(True, 'Exam already submitted', {'recorded': False})
+        try:
+            question_id = int(request.data.get('question_id'))
+            seconds = int(request.data.get('seconds'))
+        except (TypeError, ValueError):
+            return send_error('Validation Errors', {'seconds': ['question_id and seconds are required numbers']}, 422)
+        seconds = max(0, min(seconds, self.MAX_SECONDS_PER_VISIT))
+        updated = exam.details.filter(question_id=question_id).update(
+            time_spent_seconds=Coalesce(F('time_spent_seconds'), Value(0)) + seconds,
+        )
+        return api_response(True, 'Recorded', {'recorded': bool(updated)})
+
+
+class ExamRetakeView(BaseApiView):
+    """A new attempt with the same settings and filters as this exam (questions drawn again)."""
+    permission_classes = [IsAuthenticated]
+
+    @api_post('ExamRetake')
+    def post(self, request, exam_id):
+        try:
+            old = ExamTrail.objects.get(pk=exam_id, user=request.user)
+        except ExamTrail.DoesNotExist:
+            return send_error('Exam not found', {'ExamNotFound': ['No exam found for given exam_id']}, 404)
+        try:
+            with transaction.atomic():
+                new = ExamTrail.objects.create(
+                    user=request.user, title=old.title, mode=old.mode, question_mode=old.question_mode,
+                    is_timed_mode=old.is_timed_mode, duration_minutes=old.duration_minutes, difficulty=old.difficulty,
+                    shuffle_answers=old.shuffle_answers, question_count=old.total_questions or old.question_count,
+                )
+                new.categories.set(old.categories.all())
+                new.sub_categories.set(old.sub_categories.all())
+                new.sub_sub_categories.set(old.sub_sub_categories.all())
+                new.sections.set(old.sections.all())
+                new.topics.set(old.topics.all())
+                new.save_details(randomize=True)
+        except ValueError as e:
+            return send_error(str(e), {'retake': [str(e)]}, 422)
+        return api_response(True, 'Created Successfully', {'exam_id': new.id})

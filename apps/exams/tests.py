@@ -604,3 +604,111 @@ class ExamResultTests(TestCase):
                                  'correct_answers': 1, 'wrong_answers': 1, 'skipped': 3}])
         self.assertEqual(data['exam_report']['sections']['result'][0]['name'], 'Respiratory System')
         self.assertIsNotNone(data['exam']['time_spent_minutes'])
+
+
+class ExamAnalyticsTests(TestCase):
+    """GET /exams/<id>/analytics: scoring, timing and access rules."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(phone='962791234505', password='pass', first_name='Sara', last_name='Ali')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.root = Category.objects.create(name='Board')
+        self.peds = Category.objects.create(name='Pediatrics', parent=self.root, level=2)
+        subscribe(self.user, self.root)
+
+    def make_trail(self, plan, mode='exam', status='completed', times=None):
+        """plan: string of c (correct), w (wrong), u (unanswered)."""
+        trail = ExamTrail.objects.create(user=self.user, title='Board', mode=mode)
+        trail.categories.set([self.root])
+        for i, kind in enumerate(plan):
+            q = Question.objects.create(text_question=f'q{i}', category=self.root, sub_category=self.peds, status=1)
+            right = Answer.objects.create(question=q, answer_option='r')
+            wrong = Answer.objects.create(question=q, answer_option='w')
+            q.correct_answer = right
+            q.save()
+            answer = {'c': right, 'w': wrong, 'u': None}[kind]
+            trail.details.create(question=q, answer=answer, is_correct=(kind == 'c') if answer else None,
+                                 time_spent_seconds=(times[i] if times else None))
+        if status == 'completed':
+            trail.finish()
+        return trail
+
+    def get(self, trail):
+        return self.client.get(f'/api/exams/{trail.id}/analytics')
+
+    def summary(self, plan):
+        return self.get(self.make_trail(plan)).json()['data']['summary']
+
+    def test_scoring_cases(self):
+        none = self.summary('u' * 10)
+        self.assertEqual((none['score'], none['accuracy'], none['wrong'], none['unanswered'], none['completion']), (0, None, 0, 10, 0))
+        few = self.summary('cww' + 'u' * 44)  # 3 answered of 47
+        self.assertEqual((few['correct'], few['wrong'], few['unanswered'], few['answered']), (1, 2, 44, 3))
+        self.assertEqual((few['score'], few['accuracy'], few['completion']), (2.1, 33.3, 6.4))
+        self.assertEqual(few['level'], 'needs_improvement')
+        self.assertFalse(few['passed'])
+        full = self.summary('c' * 10)
+        self.assertEqual((full['score'], full['accuracy'], full['level'], full['passed']), (100, 100, 'excellent', True))
+        zero = self.summary('w' * 5)
+        self.assertEqual((zero['score'], zero['accuracy'], zero['wrong'], zero['unanswered']), (0, 0, 5, 0))
+
+    def test_pass_mark_from_settings(self):
+        from apps.content.models import Setting
+        Setting.objects.create(key='exam_pass_mark', value='50')
+        s = self.summary('ccww')
+        self.assertEqual((s['score'], s['pass_mark'], s['passed'], s['level']), (50, 50, True, 'good'))
+
+    def test_old_attempt_has_no_question_timing(self):
+        time = self.get(self.make_trail('cwu')).json()['data']['time']
+        self.assertFalse(time['has_question_timing'])
+        self.assertIsNone(time['avg_answered_seconds'])
+        self.assertIsNone(time['quadrants'])
+
+    def test_question_timing_and_quadrants(self):
+        data = self.get(self.make_trail('cwcu', times=[30, 200, 150, 10])).json()['data']
+        time = data['time']
+        self.assertTrue(time['has_question_timing'])
+        self.assertEqual(time['target_seconds'], 90)
+        self.assertEqual(time['quadrants'], {'fast_correct': 1, 'fast_wrong': 0, 'slow_correct': 1, 'slow_wrong': 1})
+        self.assertEqual((time['fastest'], time['slowest']), ({'number': 1, 'seconds': 30}, {'number': 2, 'seconds': 200}))
+        self.assertEqual(time['avg_answered_seconds'], 127)
+        subject = data['breakdown']['subjects'][0]
+        self.assertEqual((subject['name'], subject['correct'], subject['wrong'], subject['unanswered'], subject['accuracy']),
+                         ('Pediatrics', 2, 1, 1, 66.7))
+
+    def test_access_rules(self):
+        running = self.make_trail('cw', status='in_progress')
+        self.assertEqual(self.get(running).status_code, 409)  # exam mode: no results before submitting
+        other = User.objects.create_user(phone='962791234506', password='pass')
+        theirs = ExamTrail.objects.create(user=other, title='x', status='completed')
+        self.assertEqual(self.get(theirs).status_code, 404)
+
+    def test_attempts_of_the_same_exam(self):
+        first = self.make_trail('cw')
+        second = self.make_trail('cc')
+        attempts = self.get(second).json()['data']['attempts']
+        self.assertEqual([a['id'] for a in attempts], [first.id, second.id])
+        self.assertEqual(self.get(second).json()['data']['exam']['attempt_number'], 2)
+
+    def test_question_time_is_added_and_closed_after_submit(self):
+        trail = self.make_trail('cw', status='in_progress')
+        qid = trail.details.first().question_id
+        trail.details.update(time_spent_seconds=None)
+        for seconds in (40, 25):
+            self.client.post(f'/api/exams/{trail.id}/question-time', {'question_id': qid, 'seconds': seconds}, format='json')
+        self.assertEqual(trail.details.get(question_id=qid).time_spent_seconds, 65)
+        trail.finish()
+        res = self.client.post(f'/api/exams/{trail.id}/question-time', {'question_id': qid, 'seconds': 99}, format='json')
+        self.assertFalse(res.json()['data']['recorded'])
+        self.assertEqual(trail.details.get(question_id=qid).time_spent_seconds, 65)
+
+    def test_retake_creates_a_new_attempt_with_the_same_filters(self):
+        old = self.make_trail('cwu')
+        res = self.client.post(f'/api/exams/{old.id}/retake', format='json')
+        self.assertEqual(res.status_code, 200, res.json())
+        new = ExamTrail.objects.get(pk=res.json()['data']['exam_id'])
+        self.assertNotEqual(new.id, old.id)
+        self.assertEqual(list(new.categories.values_list('id', flat=True)), [self.root.id])
+        self.assertEqual(new.details.count(), 3)
+        self.assertEqual(new.status, 'in_progress')

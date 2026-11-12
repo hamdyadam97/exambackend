@@ -991,6 +991,9 @@ class ExamTrialDetail(models.Model):
     is_correct = models.BooleanField(null=True, blank=True)
     is_marked = models.BooleanField(null=True, blank=True)
     is_review = models.BooleanField(default=False)
+    # Seconds the student spent on this question (summed over every visit). Recorded by the exam player
+    # since this field exists; older attempts have no per-question timing (null).
+    time_spent_seconds = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
