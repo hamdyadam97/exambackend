@@ -240,10 +240,11 @@ DASHBOARD_MODELS = {
     ),
     'discount_codes': _base(
         DiscountCode, 'Discount Codes',
-        ['code', 'marketer', 'type', 'status', 'used_count', 'quantity'],
+        ['code', 'marketer', 'type', 'status', 'used_count', 'quantity', 'from_date', 'to_date'],
         search_fields=['code', 'marketer'],
         list_filter=['type', 'status'],
-        exclude=['created_at', 'updated_at'],
+        # used_count is counted by the payments, never typed in by hand.
+        exclude=['created_at', 'updated_at', 'used_count'],
     ),
 
     # Payments

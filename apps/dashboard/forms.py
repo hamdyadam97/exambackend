@@ -42,9 +42,16 @@ class BaseDashboardForm(forms.ModelForm):
                     self.base_class + ' admin-textarea'
                 )
             elif isinstance(widget, forms.DateInput):
-                widget.attrs.setdefault('type', 'date')
+                # input_type, not attrs['type']: Django writes type="text" first and the browser keeps
+                # the first one, so a type in attrs never showed the date picker.
+                widget.input_type = 'date'
+                widget.format = '%Y-%m-%d'  # the only value format <input type="date"> accepts
                 widget.attrs.setdefault('class', self.base_class)
             elif isinstance(widget, forms.DateTimeInput):
+                widget.input_type = 'datetime-local'
+                widget.format = '%Y-%m-%dT%H:%M'
+                if hasattr(field, 'input_formats'):
+                    field.input_formats = ['%Y-%m-%dT%H:%M', *field.input_formats]
                 widget.attrs.setdefault('class', self.base_class)
             elif isinstance(widget, forms.FileInput):
                 widget.attrs.setdefault(

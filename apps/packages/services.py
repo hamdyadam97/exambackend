@@ -13,40 +13,15 @@ class CouponService:
 
     @classmethod
     def check_coupon(cls, coupon_code, price, user=None):
-        try:
-            coupon = DiscountCode.objects.get(
-                code=coupon_code,
-                status=DiscountCode.STATUS_ACTIVE,
-                from_date__lte=timezone.now().date(),
-                to_date__gte=timezone.now().date(),
-            )
-        except DiscountCode.DoesNotExist:
-            return {'valid': False, 'message': 'Invalid or expired coupon.'}
-
-        price = float(price)
-        if coupon.used_count >= coupon.quantity:
-            return {'valid': False, 'message': 'Coupon usage limit reached.'}
-
-        discount = 0
-        if coupon.type == DiscountCode.TYPE_PERCENTAGE:
-            discount = price * (float(coupon.percentage or 0) / 100)
-        elif coupon.type == DiscountCode.TYPE_AMOUNT:
-            discount = float(coupon.amount or 0)
-
-        final_price = max(price - discount, 0)
-        return {
-            'valid': True,
-            'discount': discount,
-            'price_before_discount': price,
-            'final_price': final_price,
-            'coupon': coupon_code,
-        }
+        """Same rules as the API (apps.core.services.CouponService)."""
+        from apps.core.services import CouponService as CoreCouponService
+        return CoreCouponService.check_coupon(coupon_code, price, user)
 
     @classmethod
     def apply_coupon(cls, coupon_code, price):
         result = cls.check_coupon(coupon_code, price)
         if result['valid']:
-            DiscountCode.objects.filter(code=coupon_code).update(used_count=models.F('used_count') + 1)
+            DiscountCode.objects.filter(code=result['coupon']).update(used_count=models.F('used_count') + 1)
         return result
 
 

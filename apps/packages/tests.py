@@ -96,3 +96,57 @@ class PackagePreviewTests(TestCase):
             self.assertEqual(sorted(s['options']), ['<p>right</p>', '<p>wrong</p>'])
             self.assertNotIn('correct', str(s.keys()))
         self.assertEqual(data['package']['questions_count'], 6)
+
+
+class CouponReasonTests(TestCase):
+    def make(self, **kw):
+        from datetime import date, timedelta
+        today = date.today()
+        data = dict(code='INS003', marketer='m', type=DiscountCode.TYPE_PERCENTAGE, percentage=100, quantity=3,
+                    from_date=today - timedelta(days=1), to_date=today + timedelta(days=30), status=DiscountCode.STATUS_ACTIVE)
+        data.update(kw)
+        return DiscountCode.objects.create(**data)
+
+    def test_reasons_and_case_insensitive_code(self):
+        from datetime import date, timedelta
+        from apps.core.services import CouponService as Core
+        c = self.make()
+        ok = Core.check_coupon('ins003 ', 45)
+        self.assertTrue(ok['valid'])
+        self.assertEqual((ok['coupon'], ok['final_price']), ('INS003', 0))
+        self.assertEqual(Core.check_coupon('NOPE', 45)['reason'], 'not_found')
+        c.used_count = 3; c.save()
+        self.assertEqual(Core.check_coupon('INS003', 45)['reason'], 'used_up')
+        c.used_count = 0; c.to_date = date.today() - timedelta(days=1); c.save()
+        self.assertEqual(Core.check_coupon('INS003', 45)['reason'], 'expired')
+        c.to_date = date.today() + timedelta(days=9); c.from_date = date.today() + timedelta(days=2); c.save()
+        self.assertEqual(Core.check_coupon('INS003', 45)['reason'], 'not_started')
+        c.from_date = date.today(); c.status = DiscountCode.STATUS_INACTIVE; c.save()
+        self.assertEqual(Core.check_coupon('INS003', 45)['reason'], 'inactive')
+
+    def test_api_returns_the_reason(self):
+        from rest_framework.test import APIClient
+        self.make(used_count=8)
+        user = User.objects.create_user(phone='+962790000077', password='x' * 10)
+        package = Package.objects.create(name='p', price=45, period_days=30, category=Category.objects.create(name='X'))
+        client = APIClient()
+        client.force_authenticate(user)
+        res = client.post('/api/packages/check-coupon', {'coupon': 'INS003', 'package_id': package.id}, format='json')
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(res.json()['errors']['reason'], ['used_up'])
+
+
+class DashboardDateFieldTests(TestCase):
+    def test_discount_code_form_has_real_date_pickers(self):
+        from django.test import Client
+        admin = User.objects.create_superuser(phone='+962790000078', password='admin123', email='d@rootsexams.com')
+        client = Client()
+        client.force_login(admin)
+        html = client.get('/admin/discount_codes/create/').content.decode()
+        import re
+        tags = re.findall(r'<input[^>]*name="(?:from_date|to_date)"[^>]*>', html)
+        self.assertEqual(len(tags), 2, html[:500])
+        for tag in tags:
+            self.assertRegex(tag, r'type="date"')
+            self.assertNotRegex(tag, r'type="text"')
+        self.assertNotIn('name="used_count"', html)

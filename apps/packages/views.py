@@ -132,7 +132,7 @@ class CheckCouponView(BaseApiView):
             return send_error('Package not found', {}, 404)
         result = CouponService.check_coupon(serializer.validated_data['coupon'], package.price)
         if not result['valid']:
-            return send_error('Invalid Coupon', {'coupon': [result['message']]}, 422)
+            return send_error('Invalid Coupon', {'coupon': [result['message']], 'reason': [result.get('reason', 'not_found')]}, 422)
         return api_response(True, 'Coupon applied', result)
 
 
@@ -206,6 +206,7 @@ class SubscribeView(BaseApiView):
             coupon_valid = coupon_result['valid']
             if coupon_valid:
                 price = coupon_result['final_price']
+                coupon_code = coupon_result['coupon']  # stored spelling, so the use is counted on the right row
 
         if price == 0:
             sub = UserPackage.objects.create(

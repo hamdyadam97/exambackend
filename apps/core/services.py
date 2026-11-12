@@ -45,20 +45,25 @@ class SmsService:
 class CouponService:
     @staticmethod
     def check_coupon(coupon_code, price, user=None):
+        """Price after the coupon, or why the coupon cannot be used ('reason' for the UI):
+        not_found, inactive, not_started, expired, used_up."""
         from apps.packages.models import DiscountCode
-        try:
-            coupon = DiscountCode.objects.get(
-                code=coupon_code,
-                status=DiscountCode.STATUS_ACTIVE,
-                from_date__lte=timezone.now().date(),
-                to_date__gte=timezone.now().date(),
-            )
-        except DiscountCode.DoesNotExist:
-            return {'valid': False, 'message': 'Invalid or expired coupon.'}
+
+        coupon = DiscountCode.objects.filter(code__iexact=(coupon_code or '').strip()).first()
+        today = timezone.now().date()
+        if coupon is None:
+            return {'valid': False, 'reason': 'not_found', 'message': 'This coupon does not exist.'}
+        if coupon.status != DiscountCode.STATUS_ACTIVE:
+            return {'valid': False, 'reason': 'inactive', 'message': 'This coupon is not active.'}
+        if coupon.from_date and coupon.from_date > today:
+            return {'valid': False, 'reason': 'not_started', 'message': f'This coupon starts on {coupon.from_date}.'}
+        if coupon.to_date and coupon.to_date < today:
+            return {'valid': False, 'reason': 'expired', 'message': 'This coupon has expired.'}
+        if coupon.used_count >= coupon.quantity:
+            return {'valid': False, 'reason': 'used_up', 'message': 'This coupon has been fully used.'}
+        coupon_code = coupon.code  # the stored spelling, used to count the use later
 
         price = float(price)
-        if coupon.used_count >= coupon.quantity:
-            return {'valid': False, 'message': 'Coupon usage limit reached.'}
 
         discount = 0
         if coupon.type == DiscountCode.TYPE_PERCENTAGE:
