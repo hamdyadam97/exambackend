@@ -160,9 +160,9 @@ DASHBOARD_MODELS = {
     # Exams
     'questions': _base(
         Question, 'Questions',
-        ['text_question', 'category', 'difficulty', 'status', 'answer_type'],
-        search_fields=['text_question', 'notes'],
-        list_filter=['status', 'answer_type', 'difficulty'],
+        ['text_question', 'category', 'sub_subcategory', 'status', 'needs_review', 'difficulty'],
+        search_fields=['text_question', 'notes', 'review_note'],
+        list_filter=['needs_review', 'status', 'difficulty', 'answer_type'],
         exclude=['created_at', 'updated_at', 'deleted_at'],
     ),
     'answers': _base(

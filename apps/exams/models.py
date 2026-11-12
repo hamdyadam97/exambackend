@@ -125,6 +125,17 @@ class Question(models.Model):
         limit_choices_to={'level': 3}
     )
     sort_order = models.IntegerField(default=0, null=True, blank=True)
+    # Imported questions: id on the old platform (makes the import re-runnable) and the exam year
+    # they came from ("2024 Exam" groups), kept as data instead of as a category.
+    source_id = models.PositiveIntegerField(null=True, blank=True, unique=True)
+    exam_year = models.PositiveSmallIntegerField(null=True, blank=True, db_index=True)
+    # Set by the import when a question needs a human look (import problem or the AI answer check).
+    # Questions that cannot be used as they are (no correct answer, missing image, ...) are also
+    # imported inactive. After fixing: untick, and set the status to active.
+    needs_review = models.BooleanField(default=False, db_index=True)
+    # Options such as "All of the above" only make sense in their original place: never shuffle them.
+    keep_answer_order = models.BooleanField(default=False)
+    review_note = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -172,6 +183,7 @@ class Answer(models.Model):
         db_table = 'questions_answers'
         verbose_name = _('Answer')
         verbose_name_plural = _('Answers')
+        ordering = ['id']  # the order the options were written in
         indexes = [
             models.Index(fields=['question']),
         ]

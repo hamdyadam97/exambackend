@@ -1,83 +1,109 @@
 """
-The platform's exam taxonomy, cleaned up from the old platform's export.
+The platform's exam taxonomy, rebuilt from the old platform's export (categories_flat_clean.xlsx)
+and the questions that actually use it.
 
   Category (level 1) -> Sub Category (level 2) -> Sub Sub-Category (level 3)
   Section: shared by all exams (no category); only sections that have questions on the
            path the student picked appear in the exam builder.
   Topic:   belongs to one section; shown only as an optional filter inside its section.
 
-Loaded with `python manage.py seed_taxonomy` (idempotent: creates what is missing, never deletes).
-Cleanup applied to the export: duplicate spellings merged, truncated names completed,
-exam years (2024/2026, Past Year Q) left for a question field instead of categories,
-"Free Trial" and the 4th/5th/6th year groups dropped, placeholder topics (Test, General,
-Miscellaneous, High Yield) dropped.
+Loaded with `python manage.py seed_taxonomy` (idempotent). `--prune` also removes categories that
+are not in this tree, but only when nothing (question, package, exam) is linked to them.
+Cleanup applied to the export: study years (4th/5th/6th Year) and universities removed, their
+questions moved to the matching subject; exam-year groups (2024 Exam, 2026 Exam, RMS - 2024 Exams)
+removed, their questions moved to the matching subject; duplicate spellings merged.
 """
 
-MEDICINE_CORE = ['Internal Medicine', 'General Surgery', 'Pediatrics', 'Obstetrics and Gynecology', 'Basic Sciences']
-HOSPITAL_EXAM = ['Internal Medicine', 'Pediatrics', 'Obstetrics and Gynecology', 'Basic Sciences']
-DENTAL_SUBJECTS = [
-    'Oral Medicine', 'Oral Surgery', 'Conservative Dentistry', 'Periodontology', 'Prosthodontics',
-    'Orthodontics', 'Pedodontics', 'Dental Materials', 'Oral Histology',
+MEDICINE = ['Internal Medicine', 'Surgery', 'Pediatrics', 'Obstetrics and Gynecology', 'Basic Sciences']
+DENTAL = [
+    'Conservative & Operative Dentistry', 'Endodontics', 'Prosthodontics', 'Oral Surgery & Anesthesia',
+    'Oral Pathology & Medicine', 'Oral Radiology', 'Pediatric Dentistry', 'Periodontics', 'Pharmacology',
+    'Dental Emergencies', 'Microbiology',
 ]
-NURSING_SUBJECTS = [
-    'Medical-Surgical Nursing', 'Critical Care Nursing', 'Pediatric Nursing', 'Maternity Nursing',
-    'Psychiatric Nursing', 'Nursing Management and Leadership',
+NURSING = [
+    'Medical Surgical Nursing', 'Maternity and Pediatric Nursing', 'Critical Care Nursing',
+    'Psychiatric and Community Nursing', 'Management and Leadership', 'Fundamentals of Nursing',
 ]
 PARTS = ['Part 1', 'Part 2']
-
-RESIDENCY_SPECIALTIES = [
-    'Internal Medicine', 'General Surgery', 'Pediatrics', 'Obstetrics and Gynecology', 'Ophthalmology',
-    'ENT', 'Radiology', 'Nuclear Medicine', 'Forensic Medicine', 'Orthopedic Surgery', 'Dermatology',
-    'Neurosurgery', 'Urology', 'Psychiatry', 'Anesthesia', 'Accident and Emergency Medicine',
-    'Family Medicine', 'Pathology', 'Clinical Microbiology', 'Physical Medicine and Rehabilitation',
-    'Dentistry',
+BOARD_SPECIALTIES = [
+    'Internal Medicine', 'General Surgery', 'Pediatrics', 'Obstetrics and Gynecology', 'Ophthalmology', 'ENT',
+    'Radiology', 'Forensic Medicine', 'Orthopedic Surgery', 'Dermatology', 'Neurosurgery', 'Urology',
+    'Psychiatry', 'Anesthesia', 'Accident and Emergency Medicine', 'Family Medicine', 'Nuclear Medicine',
+    'Pathology', 'Clinical Laboratory Microbiology', 'Physical Medicine and Rehabilitation',
 ]
 
-# (level-1 name, [(level-2 name, [level-3 names])])
+# (level-1 name, [(level-2 name, [level-3 names])]). Level-1 names match the rows already entered by hand.
 TREE = [
-    ('JMC - الفحص الإجمالي', [
-        ('Medicine - طب بشري (امتياز)', MEDICINE_CORE),
-        ('Dentistry - طب أسنان', DENTAL_SUBJECTS),
+    ('Medical Students', [
+        ('Basic', [
+            'General Biology', 'General Chemistry', 'General Physics', 'General Anatomy', 'Cell Biology & Histology',
+            'General Physiology', 'Biochemistry', 'General Pharmacology', 'General Pathology', 'Medical Terminology',
+        ]),
+        ('Clinical', [
+            'Internal Medicine', 'General Surgery', 'Pediatrics', 'Obstetrics and Gynecology', 'Neurology',
+            'Ophthalmology', 'ENT', 'Dermatology', 'Orthopedics', 'Anesthesia', 'Forensic Medicine & Toxicology',
+            'Psychiatry', 'Radiology', 'Family & Community Medicine',
+        ]),
     ]),
-    ('Residency Entrance - امتحانات دخول الإقامة', [
-        ('MOH - وزارة الصحة (التنافسي - دخول الإقامة)', HOSPITAL_EXAM),
-        ('RMS - الخدمات الطبية الملكية', HOSPITAL_EXAM),
-        ('JUH - مستشفى الجامعة الأردنية', HOSPITAL_EXAM),
-        ('KAUH - مستشفى الملك المؤسس عبدالله', HOSPITAL_EXAM),
-        ('KHCC - مركز الحسين للسرطان', HOSPITAL_EXAM),
-        ('PH - مستشفى الأمير حمزة', HOSPITAL_EXAM),
-        ('Dentistry - طب أسنان', DENTAL_SUBJECTS),
+    ('JMC - الفحص الإجمالي - امتياز', [
+        ('JMC - طب بشري', MEDICINE),
     ]),
-    ('MOH Open Recruitment - وزارة الصحة (التنافسي - الإعلان المفتوح)', [
-        ('Medicine - طب بشري', ['Internal Medicine', 'Obstetrics and Gynecology']),
+    ('Residency Entrance - Medicine', [
+        ('Royal Medical Services (RMS)', MEDICINE),
+        ('Jordan University Hospital (JUH)', MEDICINE),
+        ('King Abdullah University Hospital (KAUH)', MEDICINE),
+        ('King Hussein Cancer Center (KHCC)', MEDICINE),
+        ('Private Hospitals (PH)', MEDICINE),
+        ('MOH وزارة الصحة (التنافسي - الإعلان المفتوح)', MEDICINE + ['Aptitude (IQ) - أسئلة القدرات']),
     ]),
-    ('Residency and Board Exams - البورد والإقامة', [
-        (specialty, PARTS) for specialty in RESIDENCY_SPECIALTIES
-    ]),
+    ('Residency and Board Exams', [(name, PARTS) for name in BOARD_SPECIALTIES]),
     ('SMLE - Prometric', [
-        ('Medicine - طب بشري', ['Internal Medicine', 'General Surgery', 'Pediatrics', 'Obstetrics and Gynecology']),
-        ('Nursing - تمريض', NURSING_SUBJECTS),
+        ('SMLE - Medicine', MEDICINE + ['Psychiatry', 'Ethics']),
+        ('SMLE - Nursing', NURSING[:5]),
     ]),
-    ('Nursing License - امتحان مزاولة المهنة للتمريض', [
-        ('Nursing - تمريض', NURSING_SUBJECTS),
+    ('Dentistry', [
+        ('Residency Entrance - Dentistry', DENTAL),
+        ('MOH وزارة الصحة (التنافسي - دخول الإقامة)', DENTAL),
+        ('Royal Medical Services (RMS) - Dentistry', DENTAL),
+        ('Residency and Board Exams - Dentistry', DENTAL),
+        ('JMC - طب أسنان', DENTAL),
     ]),
-    ('USMLE', [
-        ('Highly Suggested Questions', ['Step 1', 'Step 2 CK']),
+    ('Nursing', [
+        ('امتحان مزاولة المهنة للتمريض', NURSING),
     ]),
-    ('MRCP (UK)', [
-        ('Part 1', ['Cardiology']),
+    ('Pharmacy', [
+        ("Bachelor's", [
+            'Pharmacology & Pharmacotherapeutics', 'Pharmaceutics & Dosage Forms', 'Pharmaceutical Chemistry',
+            'Clinical Pharmacy & Pharmacokinetics', 'Trade Names & Local Market', 'Law & Ethics',
+            'Pharmacoeconomics & Biostatistics', 'Patient Counseling',
+        ]),
+    ]),
+    ('UWORLD', [
+        ('Step 2', ['Internal Medicine', 'Surgery', 'Pediatrics', 'Obstetrics and Gynecology', 'Psychiatry', 'Miscellaneous']),
+    ]),
+    ('USMLE Highly Suggested Questions', [
+        ('USMLE', ['Step 1', 'Step 2 CK']),
+    ]),
+    ('MRCP', [
+        ('MRCP Part 1', ['Cardiology']),
     ]),
 ]
 
-# Top-level categories already entered by hand under another spelling: the seed renames them
-# (same row, so anything linked to them stays linked) instead of creating a duplicate.
+# Level-1 rows renamed earlier (by hand or by the first version of this seed): renamed back in
+# place, so whatever is linked to them stays linked.
 ROOT_RENAMES = {
     'SMLE- prometric': 'SMLE - Prometric',
-    'Residency and Board exams': 'Residency and Board Exams - البورد والإقامة',
-    'Residency Entrance - Medicine': 'Residency Entrance - امتحانات دخول الإقامة',
-    'USMLE highly suggested questions': 'USMLE',
-    'MRCP': 'MRCP (UK)',
+    'Residency and Board exams': 'Residency and Board Exams',
+    'Residency and Board Exams - البورد والإقامة': 'Residency and Board Exams',
+    'Residency Entrance - امتحانات دخول الإقامة': 'Residency Entrance - Medicine',
+    'USMLE highly suggested questions': 'USMLE Highly Suggested Questions',
+    'USMLE': 'USMLE Highly Suggested Questions',
+    'MRCP (UK)': 'MRCP',
+    'JMC - الفحص الإجمالي': 'JMC - الفحص الإجمالي - امتياز',
 }
+
+# Level-1 rows that --prune leaves alone even though they are not in TREE (decision pending).
+PRUNE_KEEP = {'Free Trial (20 questions)'}
 
 # Section -> its topics. Section names are unique; a topic name appears under one section only.
 SECTIONS = {
@@ -179,7 +205,7 @@ SECTIONS = {
     'Dental Basic Sciences': [
         'Gross Anatomy', 'Head and Neck Anatomy', 'General Physiology', 'Oral Physiology', 'Cardiac Physiology',
         'Renal Physiology', 'Respiratory Physiology', 'Endocrine Physiology', 'Neurophysiology',
-        'Dental Biochemistry', 'Vitamins', 'Microbiology', 'Dental Pharmacology',
+        'Dental Biochemistry', 'Vitamins', 'Oral Microbiology', 'Dental Pharmacology',
     ],
     'Oral Biology and Pathology': [
         'Dental Anatomy and Oral Histology', 'Oral Embryology, Salivary Glands and TMJ', 'Oral Pathology',
@@ -204,4 +230,23 @@ SECTIONS = {
     'Physical Assessment': [],
     'Quality and Safety': [],
     'Nursing Management': [],
+    # Basic sciences, aptitude, ethics, pharmacy and nursing
+    'General Biology': ['Cell Biology', 'Molecular Biology', 'Ecology & Evolution', 'Plant & Animal Biology'],
+    'General Chemistry': [
+        'Stoichiometry', 'Chemical Bonding & Structure', 'Thermochemistry', 'Solutions & Equilibrium',
+        'Chemical Nomenclature', 'Organic Chemistry',
+    ],
+    'General Physics': [],
+    'Anatomy': ['Head and Neck', 'Thorax', 'Abdomen and Pelvis', 'Limbs', 'Neuroanatomy'],
+    'Physiology': [],
+    'Pathology': [],
+    'Microbiology': [],
+    'Medical Terminology': [],
+    'Aptitude (IQ)': ['Verbal Reasoning', 'Numerical Reasoning', 'Logical Reasoning'],
+    'Medical Ethics and Law': [],
+    'ENT (Otorhinolaryngology)': [],
+    'Urology': [],
+    'Pharmacy Practice': [],
+    'Fundamentals of Nursing': [],
+    'Pain Management': [],
 }

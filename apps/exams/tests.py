@@ -365,3 +365,78 @@ class StudentInsightsApiTests(TestCase):
     def test_requires_login(self):
         self.client.force_authenticate(None)
         self.assertIn(self.client.get('/api/dashboard/insights').status_code, (401, 403))
+
+
+class ImportQuestionsTests(TestCase):
+    """manage.py import_questions: the cleaned bank from the old platform."""
+
+    def setUp(self):
+        import json
+        import tempfile
+        from django.core.management import call_command
+
+        call_command('seed_taxonomy', verbosity=0)
+        path = ['Residency Entrance - Medicine', 'Royal Medical Services (RMS)']
+        self.records = [
+            {'source_id': 1, 'text': '<p>Q1</p>', 'options': ['<p>a</p>', '<p>b</p>', '<p>All of the above</p>'],
+             'correct': 2, 'explanation': '<p>why</p>', 'hint': None, 'path': path + ['Surgery'], 'exam_year': 2024,
+             'active_before': True, 'problems': [], 'fixed_order': True,
+             'section': 'General Surgery', 'topic': 'Hernia'},
+            {'source_id': 2, 'text': '<p>Q2</p>', 'options': ['<p>a</p>', '<p>b</p>'], 'correct': None,
+             'explanation': None, 'hint': None, 'path': path + [None], 'exam_year': None, 'active_before': True,
+             'problems': ['No correct answer was set on the old platform.'], 'fixed_order': False},
+        ]
+        self.file = tempfile.NamedTemporaryFile('w', suffix='.json', delete=False, encoding='utf-8')
+        json.dump(self.records, self.file)
+        self.file.close()
+        self.call = lambda: call_command('import_questions', self.file.name, verbosity=0)
+
+    def test_import_is_complete_and_rerunnable(self):
+        from apps.exams.models import ExamSectionLink, QuestionTopic
+
+        self.call()
+        self.call()
+        self.assertEqual(Question.objects.count(), 2)
+        good = Question.objects.get(source_id=1)
+        self.assertEqual(good.status, Question.ACTIVE)
+        self.assertFalse(good.needs_review)
+        self.assertEqual(good.sub_subcategory.name, 'Surgery')
+        self.assertEqual(good.sub_subcategory.parent.name, 'Royal Medical Services (RMS)')
+        self.assertEqual(good.correct_answer.answer_option, '<p>All of the above</p>')
+        self.assertEqual([a.answer_option for a in good.answers.all()], self.records[0]['options'])
+        self.assertEqual((good.exam_year, good.keep_answer_order, good.notes), (2024, True, '<p>why</p>'))
+        self.assertTrue(ExamSectionLink.objects.filter(question=good, section__name='General Surgery').exists())
+        self.assertTrue(QuestionTopic.objects.filter(question=good, topic__topic='Hernia').exists())
+
+        broken = Question.objects.get(source_id=2)
+        self.assertEqual(broken.status, Question.INACTIVE)
+        self.assertTrue(broken.needs_review)
+        self.assertIn('No correct answer', broken.review_note)
+        self.assertIsNone(broken.sub_subcategory)
+
+    def test_fixed_order_question_is_never_shuffled(self):
+        self.call()
+        user = User.objects.create_user(phone='962791234500', password='pass')
+        client = APIClient()
+        client.force_authenticate(user)
+        q = Question.objects.get(source_id=1)
+        trail = ExamTrail.objects.create(user=user, title='t', shuffle_answers=True)
+        trail.details.create(question=q)
+        shown = client.get(f'/api/exams/{q.id}/get-question?exam_id={trail.id}').json()['data']['question']['answers']
+        self.assertEqual([a['id'] for a in shown], list(q.answers.values_list('id', flat=True)))
+
+
+class SeedPruneTests(TestCase):
+    def test_prune_removes_only_unused_categories(self):
+        from django.core.management import call_command
+
+        stale = Category.objects.create(name='MOH Open Recruitment')
+        Category.objects.create(name='Medicine', parent=stale, level=2)
+        used = Category.objects.create(name='Old exam')
+        Question.objects.create(text_question='q', category=used)
+        kept = Category.objects.create(name='Free Trial (20 questions)')
+        call_command('seed_taxonomy', '--prune', verbosity=0)
+        self.assertFalse(Category.objects.filter(name__in=['MOH Open Recruitment', 'Medicine']).exists())
+        self.assertTrue(Category.objects.filter(pk=used.pk).exists())
+        self.assertTrue(Category.objects.filter(pk=kept.pk).exists())
+        self.assertTrue(Category.objects.filter(name='Medical Students', parent=None).exists())

@@ -53,7 +53,7 @@ class TaxonomySeedTests(TestCase):
         self.assertEqual(handmade.name, 'SMLE - Prometric')  # renamed in place, not duplicated
         self.assertEqual(handmade.status, Category.INACTIVE)
         self.assertEqual(Category.objects.filter(name='SMLE - Prometric').count(), 1)
-        self.assertTrue(handmade.children.filter(name='Nursing - تمريض').exists())
+        self.assertTrue(handmade.children.filter(name='SMLE - Nursing').exists())
         self.assertTrue(Category.objects.filter(pk=untouched.pk, name='UWORLD').exists())
         counts = (Category.objects.count(), ExamSection.objects.count(), QuestionsTopic.objects.count())
         call_command('seed_taxonomy', verbosity=0)

@@ -598,7 +598,8 @@ class ExamQuestionDetailView(BaseApiView):
             question, context={'request': request, 'reveal': trail.reveals_question(question_id)},
         ).data
         by_id = {answer['id']: answer for answer in data['answers']}
-        data['answers'] = [by_id[aid] for aid in trail.answer_order(question_id, by_id)]
+        if not question.keep_answer_order:
+            data['answers'] = [by_id[aid] for aid in trail.answer_order(question_id, by_id)]
         return api_response(True, 'Exam data', {'question': data})
 
 
