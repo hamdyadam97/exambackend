@@ -440,3 +440,20 @@ class SeedPruneTests(TestCase):
         self.assertTrue(Category.objects.filter(pk=used.pk).exists())
         self.assertTrue(Category.objects.filter(pk=kept.pk).exists())
         self.assertTrue(Category.objects.filter(name='Medical Students', parent=None).exists())
+
+
+class NoSectionsYetTests(TestCase):
+    """Imported questions not filed under a section can still be used: the whole path is drawn."""
+
+    def test_path_without_sections_counts_and_builds(self):
+        user = User.objects.create_user(phone='962791234501', password='pass')
+        client = APIClient()
+        client.force_authenticate(user)
+        root = Category.objects.create(name='JMC')
+        for i in range(3):
+            Question.objects.create(text_question=f'q{i}', category=root, status=1)
+        data = client.get(f'/api/exams/sections?category_ids[]={root.id}').json()['data']
+        self.assertEqual((data['sections'], data['total_questions']), ([], 3))
+        res = client.post('/api/exams/store', {'exam_mode': 'exam', 'question_count': 10, 'categories': [root.id]}, format='json')
+        self.assertEqual(res.status_code, 200, res.json())
+        self.assertEqual(ExamTrail.objects.get(pk=res.json()['data']['exam_id']).details.count(), 3)

@@ -331,7 +331,16 @@ class ExamSectionsView(BaseApiView):
             section_ids=section_ids,
             difficulty=difficulty,
         )
-        total = Question.objects.filter(total_filter).distinct().count() if section_ids else 0
+        if not section_ids:
+            # No question on this path is filed under a section yet: the student skips the section
+            # step and the exam draws from the whole path.
+            total_filter = exam_classification_q(
+                category_ids=category_ids,
+                sub_category_ids=sub_category_ids,
+                sub_sub_category_ids=sub_sub_category_ids,
+                difficulty=difficulty,
+            )
+        total = Question.objects.filter(total_filter).distinct().count()
 
         return api_response(True, 'Fetched Successfully', {
             'sections': SectionResource(sections, many=True, context={'request': request}).data,
@@ -461,7 +470,9 @@ class ExamRefreshView(BaseApiView):
                 sub_sub_category_ids=sscids,
                 section_ids=sids_for_total,
             )
-            total = Question.objects.filter(total_filter).count() if sids_for_total else 0
+            if not sids_for_total:
+                total_filter = exam_classification_q(category_ids=cids, sub_category_ids=scids, sub_sub_category_ids=sscids)
+            total = Question.objects.filter(total_filter).distinct().count()
             data['total_questions'] = total
             data['total_stages'] = (total + 39) // 40 if total > 0 else 0
 
