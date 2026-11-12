@@ -558,3 +558,18 @@ class KeywordClassifierTests(TestCase):
         self.assertEqual(list(q2.exam_section_links.values_list('section__name', flat=True)), ['Hematology'])  # kept
         q1.refresh_from_db()
         self.assertEqual(q1.sub_subcategory.name, 'Internal Medicine')
+
+
+class LetterExplanationOrderTests(TestCase):
+    def test_options_not_shuffled_when_explanation_names_a_letter(self):
+        user = User.objects.create_user(phone='962791234503', password='pass')
+        client = APIClient()
+        client.force_authenticate(user)
+        cat = Category.objects.create(name='C')
+        q = Question.objects.create(text_question='q', category=cat, status=1, notes='<p>Correct Answer:</p><p>D. Fourth</p>')
+        ids = [Answer.objects.create(question=q, answer_option=str(i)).id for i in range(6)]
+        trail = ExamTrail.objects.create(user=user, title='t', shuffle_answers=True)
+        trail.details.create(question=q)
+        self.assertNotEqual(trail.answer_order(q.id, ids), ids)  # this trail would shuffle
+        shown = client.get(f'/api/exams/{q.id}/get-question?exam_id={trail.id}').json()['data']['question']['answers']
+        self.assertEqual([a['id'] for a in shown], ids)

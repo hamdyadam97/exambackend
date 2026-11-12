@@ -1,6 +1,8 @@
 """
 Exam API views.
 """
+import re
+
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
@@ -23,6 +25,10 @@ from apps.core.utils import api_response, send_response, send_error, api_get, ap
 from apps.content.models import Setting
 from apps.exams.insights import student_insights
 from apps.packages.access import access_scope
+
+
+LETTER_REFERENCE = re.compile(
+    r'(correct\s+answer|answer\s+is|answer\s*:|option)\s*(is)?\s*[:\-]?\s*\(?[A-Ea-e]\s*[\).:]', re.I)
 
 
 def scoped_q(request, *args, **kwargs):
@@ -621,7 +627,9 @@ class ExamQuestionDetailView(BaseApiView):
             question, context={'request': request, 'reveal': trail.reveals_question(question_id)},
         ).data
         by_id = {answer['id']: answer for answer in data['answers']}
-        if not question.keep_answer_order:
+        # Options keep their written order when it matters: "All of the above" questions, and explanations
+        # that name the answer by its letter ("Correct answer is: D) ..."), which shuffling would contradict.
+        if not question.keep_answer_order and not LETTER_REFERENCE.search(strip_tags(question.notes or '')):
             data['answers'] = [by_id[aid] for aid in trail.answer_order(question_id, by_id)]
         return api_response(True, 'Exam data', {'question': data})
 
