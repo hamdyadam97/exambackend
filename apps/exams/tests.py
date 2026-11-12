@@ -521,3 +521,40 @@ class SubscriptionAccessTests(TestCase):
         self.user.is_staff = True
         self.user.save()
         self.assertEqual(sorted(self.roots()), ['Board', 'SMLE'])
+
+
+class KeywordClassifierTests(TestCase):
+    def test_files_questions_by_field_and_keywords(self):
+        from apps.exams.classify import classify, pick_subject, plain
+
+        q = plain('A 3-week-old newborn with bilious vomiting; all of the following are true except')
+        self.assertNotEqual(classify(q, '', ['Medical Students', 'Clinical', ''])[1], 'Myeloproliferative Diseases')
+        self.assertEqual(classify(plain('Signs of pneumonia on chest x-ray'), '', ['SMLE - Prometric', 'SMLE - Medicine', '']),
+                         ('Respiratory System', 'Pneumonia'))
+        # A dental question never lands in a nursing or general medicine-only section.
+        section, _ = classify(plain('Which material is used for a root canal filling?'), '', ['Dentistry', 'Residency Entrance - Dentistry', 'Endodontics'])
+        self.assertIn(section, {'Clinical Dentistry', 'Dental Basic Sciences', 'Oral Biology and Pathology'})
+        self.assertEqual(classify(plain('x + y = 7'), '', ['Residency Entrance - Medicine', 'MOH', 'Aptitude (IQ) - أسئلة القدرات'])[0], 'Aptitude (IQ)')
+        medicine = ['Internal Medicine', 'Surgery', 'Pediatrics', 'Obstetrics and Gynecology', 'Basic Sciences']
+        self.assertEqual(pick_subject(plain('A 4-year-old child with fever'), 'Infectious Diseases', medicine), 'Pediatrics')
+        self.assertEqual(pick_subject(plain('A 30-year-old pregnant woman'), 'Reproductive System', medicine), 'Obstetrics and Gynecology')
+        self.assertEqual(pick_subject(plain('A 60-year-old man with chest pain'), 'Cardiovascular System', medicine), 'Internal Medicine')
+
+    def test_command_fills_only_missing_links(self):
+        from django.core.management import call_command
+        from apps.content.models import ExamSection
+        from apps.exams.models import ExamSectionLink
+
+        call_command('seed_taxonomy', verbosity=0)
+        root = Category.objects.get(name='SMLE - Prometric', parent=None)
+        sub = root.children.get(name='SMLE - Medicine')
+        q1 = Question.objects.create(text_question='<p>Pneumonia in a 70-year-old man</p>', category=root, sub_category=sub, status=1)
+        q2 = Question.objects.create(text_question='<p>Hernia repair</p>', category=root, sub_category=sub, status=1)
+        manual = ExamSection.objects.get(name='Hematology')
+        ExamSectionLink.objects.create(question=q2, section=manual)
+        call_command('classify_questions', verbosity=0)
+        call_command('classify_questions', verbosity=0)
+        self.assertEqual(list(q1.exam_section_links.values_list('section__name', flat=True)), ['Respiratory System'])
+        self.assertEqual(list(q2.exam_section_links.values_list('section__name', flat=True)), ['Hematology'])  # kept
+        q1.refresh_from_db()
+        self.assertEqual(q1.sub_subcategory.name, 'Internal Medicine')
