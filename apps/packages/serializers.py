@@ -4,13 +4,24 @@ Package serializers.
 from decimal import Decimal
 from rest_framework import serializers
 from apps.packages.models import Package, UserPackage, DiscountCode
-from apps.content.serializers import CategoryResource
+
+
+class PackageCategoryResource(serializers.Serializer):
+    """The category a package opens, with its parents' names (no subtree: keeps package lists light)."""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    level = serializers.IntegerField()
+    path = serializers.SerializerMethodField()
+
+    def get_path(self, obj):
+        return [c.name for c in obj.get_ancestors(include_self=True)]
 
 
 class PackageResource(serializers.ModelSerializer):
-    category = CategoryResource(read_only=True)
+    category = PackageCategoryResource(read_only=True)
     difficulty_label = serializers.CharField(source='get_difficulty_level_display', read_only=True)
     original_price = serializers.SerializerMethodField()
+    questions_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Package
@@ -20,8 +31,21 @@ class PackageResource(serializers.ModelSerializer):
             'category', 'is_trial', 'is_custom', 'is_bestseller', 'is_new',
             'is_featured', 'daily_rate', 'difficulty_level', 'difficulty_label', 'rating',
             'students_count', 'discount_percentage', 'language',
-            'created_at',
+            'questions_count', 'created_at',
         ]
+
+    def get_questions_count(self, obj):
+        """Active questions the package opens (counted once per category for a whole list)."""
+        if not obj.category_id:
+            return 0
+        cache = self.context.setdefault('_questions_by_category', {}) if isinstance(self.context, dict) else {}
+        if obj.category_id not in cache:
+            from apps.exams.models import Question
+            field = {1: 'category_id', 2: 'sub_category_id'}.get(obj.category.level, 'sub_subcategory_id')
+            cache[obj.category_id] = Question.objects.filter(
+                **{field: obj.category_id}, status=Question.ACTIVE, deleted_at__isnull=True,
+            ).count()
+        return cache[obj.category_id]
 
     def get_original_price(self, obj):
         if obj.discount_percentage and obj.discount_percentage > 0 and obj.price is not None:

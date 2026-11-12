@@ -44,7 +44,8 @@ class PackageListView(BaseApiView):
 
     @api_get('PackageList')
     def get(self, request):
-        packages = Package.objects.filter(status=1, is_trial=False).order_by('-created_at')
+        packages = Package.objects.filter(status=1, is_trial=False).select_related('category__parent__parent').order_by(
+            'category__parent__parent__order', 'category__parent__order', 'category__order', 'period_days', 'price')
         return api_response(True, 'Fetched Successfully', {
             'packages': PackageResource(packages, many=True, context={'request': request}).data,
         })
