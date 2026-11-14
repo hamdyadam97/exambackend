@@ -126,9 +126,17 @@ class ExamTrialResource(serializers.ModelSerializer):
         return min(minutes, obj.duration_minutes) if obj.duration_minutes else minutes
 
 
+class CategoryNameResource(serializers.Serializer):
+    """id and name only: exam lists never need a category's subtree."""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
 class ExamTrialIndexResource(serializers.ModelSerializer):
-    categories = CategoryResource(many=True, read_only=True)
+    categories = CategoryNameResource(many=True, read_only=True)
     details_count = serializers.IntegerField(read_only=True)
+    path = serializers.SerializerMethodField()
+    score = serializers.SerializerMethodField()
 
     class Meta:
         model = ExamTrail
@@ -136,7 +144,19 @@ class ExamTrialIndexResource(serializers.ModelSerializer):
             'id', 'title', 'mode', 'question_mode', 'question_count',
             'total_questions', 'correct_answers', 'wrong_answers',
             'status', 'current_stage', 'categories', 'details_count', 'created_at',
+            'path', 'score',
         ]
+
+    def get_path(self, obj):
+        """[exam, specialty, subject] names the attempt was built from (first of each level)."""
+        levels = (obj.categories.all(), obj.sub_categories.all(), obj.sub_sub_categories.all())
+        return [items[0].name for items in levels if len(items)]
+
+    def get_score(self, obj):
+        """Correct / total x 100 for a submitted attempt, else None."""
+        if obj.status != 'completed' or not obj.total_questions:
+            return None
+        return round((obj.correct_answers or 0) * 100 / obj.total_questions, 1)
 
     def to_representation(self, instance):
         return hide_scores(super().to_representation(instance), instance)

@@ -6,7 +6,7 @@ import re
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
-from django.db.models import Count, F, Max, Q, Value
+from django.db.models import Avg, Case, Count, ExpressionWrapper, F, FloatField, Max, Q, Value, When
 from django.db.models.functions import Coalesce
 from django.utils.html import strip_tags
 from django.utils.text import Truncator
@@ -158,17 +158,52 @@ class ExamListView(BaseApiView):
 
     @api_get('ExamList')
     def get(self, request):
-        exams = ExamTrail.objects.filter(user=request.user).prefetch_related('categories').annotate(
-            details_count=Count('details', filter=Q(details__answer_id__isnull=False))
-        ).order_by('-created_at')
+        from apps.exams.analytics import _int_setting
+
+        pass_mark = _int_setting('exam_pass_mark', 60)
+        mine = ExamTrail.objects.filter(user=request.user)
+        # Score of a submitted attempt, for the result filter and the score ordering.
+        score = Case(
+            When(status='completed', total_questions__gt=0,
+                 then=ExpressionWrapper(F('correct_answers') * 100.0 / F('total_questions'), output_field=FloatField())),
+            default=None, output_field=FloatField(),
+        )
+        exams = mine.prefetch_related('categories', 'sub_categories', 'sub_sub_categories').annotate(
+            details_count=Count('details', filter=Q(details__answer_id__isnull=False)),
+            score_value=score,
+        )
+
+        # Optional filters, all backward compatible: without them the list is what it always was.
         status = request.query_params.get('status')
         if status == 'completed':
             exams = exams.filter(status='completed')
         elif status == 'in_progress':
             exams = exams.exclude(status='completed')
+        elif status == 'passed':
+            exams = exams.filter(score_value__gte=pass_mark)
+        elif status == 'failed':
+            exams = exams.filter(status='completed', score_value__lt=pass_mark)
+        query = (request.query_params.get('q') or '').strip()
+        if query:
+            ids = ExamTrail.objects.filter(user=request.user).filter(
+                Q(title__icontains=query) | Q(categories__name__icontains=query)
+                | Q(sub_categories__name__icontains=query) | Q(sub_sub_categories__name__icontains=query)
+            ).values('id')
+            exams = exams.filter(id__in=ids)
+        ordering = {
+            'date': ('created_at', 'id'),
+            '-date': ('-created_at', '-id'),
+            'score': (F('score_value').asc(nulls_last=True), '-created_at'),
+            '-score': (F('score_value').desc(nulls_last=True), '-created_at'),
+        }.get(request.query_params.get('ordering'), ('-created_at', '-id'))
+        exams = exams.order_by(*ordering)
+
         from apps.core.pagination import StandardResultsSetPagination
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(exams, request)
+
+        completed = mine.filter(status='completed', total_questions__gt=0).annotate(score_value=score)
+        average = completed.aggregate(avg=Avg('score_value'))['avg']
         data = {
             'exams': ExamTrialIndexResource(page, many=True, context={'request': request}).data,
             'pagination': {
@@ -176,6 +211,15 @@ class ExamListView(BaseApiView):
                 'next': paginator.get_next_link(),
                 'previous': paginator.get_previous_link(),
             },
+            # Totals over all the attempts of the student, whatever filter is applied.
+            'stats': {
+                'total': mine.count(),
+                'in_progress': mine.exclude(status='completed').count(),
+                'completed': mine.filter(status='completed').count(),
+                'passed': completed.filter(score_value__gte=pass_mark).count(),
+                'average_score': round(average, 1) if average is not None else None,
+            },
+            'pass_mark': pass_mark,
         }
         return api_response(True, 'Fetched Successfully', data)
 

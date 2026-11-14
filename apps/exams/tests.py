@@ -712,3 +712,45 @@ class ExamAnalyticsTests(TestCase):
         self.assertEqual(list(new.categories.values_list('id', flat=True)), [self.root.id])
         self.assertEqual(new.details.count(), 3)
         self.assertEqual(new.status, 'in_progress')
+
+
+class ExamListApiTests(TestCase):
+    """GET /exams/get: optional status/q/ordering, stats over all attempts, light categories."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(phone='962791234507', password='pass')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        root = Category.objects.create(name='Board')
+        self.peds = Category.objects.create(name='Pediatrics', parent=root, level=2)
+        Category.objects.create(name='Neonates', parent=self.peds, level=3)
+        surgery = Category.objects.create(name='Surgery', parent=root, level=2)
+
+        def trail(sub, correct, total, status='completed'):
+            t = ExamTrail.objects.create(user=self.user, title='Exam', status=status, total_questions=total, correct_answers=correct)
+            t.categories.set([root])
+            t.sub_categories.set([sub])
+            return t
+        self.high = trail(self.peds, 9, 10)      # 90% passed
+        self.low = trail(surgery, 3, 10)         # 30% failed
+        self.running = trail(surgery, 0, 0, status='in_progress')
+
+    def get(self, query=''):
+        return self.client.get(f'/api/exams/get?per_page=100{query}').json()['data']
+
+    def ids(self, query=''):
+        return [e['id'] for e in self.get(query)['exams']]
+
+    def test_filters_search_ordering_and_stats(self):
+        self.assertEqual(self.ids('&status=passed'), [self.high.id])
+        self.assertEqual(self.ids('&status=failed'), [self.low.id])
+        self.assertEqual(self.ids('&status=in_progress'), [self.running.id])
+        self.assertEqual(sorted(self.ids('&q=pediat')), [self.high.id])
+        self.assertEqual(self.ids('&ordering=-score'), [self.high.id, self.low.id, self.running.id])
+        data = self.get()
+        self.assertEqual(data['stats'], {'total': 3, 'in_progress': 1, 'completed': 2, 'passed': 1, 'average_score': 60.0})
+        self.assertEqual(data['pass_mark'], 60)
+        item = next(e for e in data['exams'] if e['id'] == self.high.id)
+        self.assertEqual((item['score'], item['path']), (90.0, ['Board', 'Pediatrics']))
+        self.assertEqual(item['categories'], [{'id': item['categories'][0]['id'], 'name': 'Board'}])  # no subtree
+        self.assertIsNone(next(e for e in data['exams'] if e['id'] == self.running.id)['score'])
